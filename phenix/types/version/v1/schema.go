@@ -787,14 +787,8 @@ components:
           default: dhcp
           example: dhcp
     serial_iface:
-      allOf:
-      - $ref: '#/components/schemas/iface'
-      - $ref: '#/components/schemas/iface_address'
-      - $ref: '#/components/schemas/iface_rulesets'
       required:
       - type
-      - proto
-      - udp_port
       - baud_rate
       - device
       properties:
@@ -805,20 +799,6 @@ components:
           - serial
           default: serial
           example: serial
-        proto:
-          type: string
-          title: Interface Protocol
-          enum:
-          - static
-          default: static
-          example: static
-        udp_port:
-          type: integer
-          title: UDP Port
-          minimum: 0
-          maximum: 65535
-          default: 8989
-          example: 8989
         baud_rate:
           type: integer
           title: Serial Baud Rate
