@@ -117,7 +117,7 @@ func (this Startup) Start(spec *v1.ExperimentSpec) error {
 			for idx := range node.Network.Interfaces {
 				ifaceFile := fmt.Sprintf("%s/interfaces-%s-eth%d", startupDir, node.General.Hostname, idx)
 
-				if err := tmpl.CreateFileFromTemplate("linux_interfaces.tmpl", node, ifaceFile); err != nil {
+				if err := tmpl.CreateFileFromTemplate("linux_interfaces.tmpl", node, ifaceFile,0644); err != nil {
 					return fmt.Errorf("generating linux interfaces config: %w", err)
 				}
 			}
@@ -129,21 +129,21 @@ func (this Startup) Start(spec *v1.ExperimentSpec) error {
 				timeZone     = "Etc/UTC"
 			)
 
-			if err := tmpl.CreateFileFromTemplate("linux_hostname.tmpl", node.General.Hostname, hostnameFile); err != nil {
+			if err := tmpl.CreateFileFromTemplate("linux_hostname.tmpl", node.General.Hostname, hostnameFile,0755); err != nil {
 				return fmt.Errorf("generating linux hostname config: %w", err)
 			}
 
-			if err := tmpl.CreateFileFromTemplate("linux_timezone.tmpl", timeZone, timezoneFile); err != nil {
+			if err := tmpl.CreateFileFromTemplate("linux_timezone.tmpl", timeZone, timezoneFile,0755); err != nil {
 				return fmt.Errorf("generating linux timezone config: %w", err)
 			}
 
-			if err := tmpl.CreateFileFromTemplate("linux_interfaces.tmpl", node, ifaceFile); err != nil {
+			if err := tmpl.CreateFileFromTemplate("linux_interfaces.tmpl", node, ifaceFile,0644); err != nil {
 				return fmt.Errorf("generating linux interfaces config: %w", err)
 			}
 		} else if node.Hardware.OSType == v1.OSType_Windows {
 			startupFile := startupDir + "/" + node.General.Hostname + "-startup.ps1"
 
-			if err := tmpl.CreateFileFromTemplate("windows_startup.tmpl", node, startupFile); err != nil {
+			if err := tmpl.CreateFileFromTemplate("windows_startup.tmpl", node, startupFile,0755); err != nil {
 				return fmt.Errorf("generating windows startup config: %w", err)
 			}
 

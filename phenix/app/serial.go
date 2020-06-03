@@ -94,7 +94,7 @@ func (Serial) Start(spec *v1.ExperimentSpec) error {
 
 			serialFile := startupDir + "/" + node.General.Hostname + "-serial.bash"
 
-			if err := tmpl.CreateFileFromTemplate("serial_startup.tmpl", serial, serialFile); err != nil {
+			if err := tmpl.CreateFileFromTemplate("serial_startup.tmpl", serial, serialFile,0755); err != nil {
 				return fmt.Errorf("generating serial script: %w", err)
 			}
 

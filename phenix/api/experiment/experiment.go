@@ -243,7 +243,7 @@ func Start(name string) error {
 
 	filename := fmt.Sprintf("%s/mm_files/%s.mm", exp.BaseDir, exp.ExperimentName)
 
-	if err := tmpl.CreateFileFromTemplate("minimega_script.tmpl", exp, filename); err != nil {
+	if err := tmpl.CreateFileFromTemplate("minimega_script.tmpl", exp, filename,0644); err != nil {
 		return fmt.Errorf("generating minimega script: %w", err)
 	}
 
