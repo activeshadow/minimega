@@ -1,7 +1,7 @@
 namespace {{ .ExperimentName }}
 ns queueing true
 
-{{ if and (ne .VLANs.Min 0) (ne .VLANs.Max 0) }}
+{{- if and (ne .VLANs.Min 0) (ne .VLANs.Max 0) }}
 vlans range {{ .VLANs.Min }} {{ .VLANs.Max }}
 {{- end }}
 
@@ -11,12 +11,12 @@ vlans add {{ $alias }} {{ $id }}
   {{- end }}
 {{- end }}
 
-{{ if .RunLocal }}
+{{- if .RunLocal }}
 ns del-host all
 ns add-host localhost
 {{- end }}
 
-{{ $basedir := .BaseDir }}
+{{- $basedir := .BaseDir }}
 
 {{- range .Topology.Nodes }}
 {{/* added space to place hostname above relevant block */}}
