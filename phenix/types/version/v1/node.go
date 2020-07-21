@@ -2,6 +2,7 @@ package v1
 
 import (
 	"strings"
+	"fmt"
 )
 
 type VMType string
@@ -41,7 +42,8 @@ type Node struct {
 	Hardware   Hardware     `json:"hardware" yaml:"hardware"`
 	Network    Network      `json:"network" yaml:"network"`
 	Injections []*Injection `json:"injections" yaml:"injections"`
-	FilePermissions []*Permission `json:"permissions" yaml:"permissions"`
+	Permissions []*Permission `json:"permissions" yaml:"permissions"`
+}
 
 type General struct {
 	Hostname    string `json:"hostname" yaml:"hostname"`
@@ -127,9 +129,9 @@ func (this Node) FileInjects(basedir string) string {
 }
 
 func (this Node) FilePermissions() string {
-	permissions := make([]string, len(this.InjectPermission))
+	permissions := make([]string, len(this.Permissions))
 
-	for i, permission := range this.FilePermissions {
+	for i, permission := range this.Permissions {
 		if permission.Path == "" {
 			return ""
 		}
@@ -142,10 +144,7 @@ func (this Node) FilePermissions() string {
 		if permission.Permission == "" {
 			permission.Permission = "0664"
 		}
-		if permission.Recursive == "" {
-			permission.Recursive = False
-		}
-		permissions[i] = fmt.Sprintf("%s:%s:%s:%s:%t",permission.Path,permission.Owner,permission.Group,permission.Permission,permission.Recursive)
+		permissions[i] = permission.Path+":"+permission.Owner+":"+permission.Group+":"+permission.Permission+":"+fmt.Sprintf("%t",permission.Recursive)
 	}
 	return strings.Join(permissions, " ")
 
