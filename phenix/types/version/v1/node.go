@@ -41,7 +41,7 @@ type Node struct {
 	Hardware   Hardware     `json:"hardware" yaml:"hardware"`
 	Network    Network      `json:"network" yaml:"network"`
 	Injections []*Injection `json:"injections" yaml:"injections"`
-}
+	FilePermissions []*Permission `json:"permissions" yaml:"permissions"`
 
 type General struct {
 	Hostname    string `json:"hostname" yaml:"hostname"`
@@ -70,6 +70,14 @@ type Injection struct {
 	Src         string `json:"src" yaml:"src"`
 	Dst         string `json:"dst" yaml:"dst"`
 	Description string `json:"description" yaml:"description"`
+}
+
+type Permission struct {
+	Path        string `json:"path" yaml:"path"`
+	Owner	    string `json:"owner" ymal:"owner"`
+	Group	    string `json:"group" ymal:"group"`
+	Permission  string `json:"permission" ymal:"permission"`
+	Recursive   bool   `json:"recursive" ymal: "recursive"`
 }
 
 func (this *Node) SetDefaults() {
@@ -116,6 +124,31 @@ func (this Node) FileInjects(basedir string) string {
 	}
 
 	return strings.Join(injects, " ")
+}
+
+func (this Node) FilePermissions() string {
+	permissions := make([]string, len(this.InjectPermission))
+
+	for i, permission := range this.FilePermissions {
+		if permission.Path == "" {
+			return ""
+		}
+		if permission.Owner == "" {
+			permission.Owner = "root"
+		}
+		if permission.Group == "" {
+			permission.Group =  "root"
+		}
+		if permission.Permission == "" {
+			permission.Permission = "0664"
+		}
+		if permission.Recursive == "" {
+			permission.Recursive = False
+		}
+		permissions[i] = fmt.Sprintf("%s:%s:%s:%s:%t",permission.Path,permission.Owner,permission.Group,permission.Permission,permission.Recursive)
+	}
+	return strings.Join(permissions, " ")
+
 }
 
 func (this Node) RouterName() string {
