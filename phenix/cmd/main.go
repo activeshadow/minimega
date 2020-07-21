@@ -11,7 +11,10 @@ import (
 	"phenix/api/config"
 	"phenix/api/experiment"
 	"phenix/api/image"
+	"phenix/api/vlan"
 	"phenix/api/vm"
+	"phenix/app"
+	"phenix/scheduler"
 	"phenix/store"
 	v1 "phenix/types/version/v1"
 	"phenix/util"
@@ -49,12 +52,34 @@ func main() {
 				Usage:   "log verbosity (0 - 10)",
 				EnvVars: []string{"PHENIX_LOG_VERBOSITY"},
 			},
+			&cli.StringFlag{
+				Name:    "log.error-file",
+				Aliases: []string{"e"},
+				Usage:   "log fatal errors to file",
+				Value:   "phenix.err",
+				EnvVars: []string{"PHENIX_LOG_ERROR_FILE"},
+			},
+			&cli.BoolFlag{
+				Name:    "log.error-stderr",
+				Aliases: []string{"vvv"},
+				Usage:   "log fatal errors to STDERR",
+				EnvVars: []string{"PHENIX_LOG_ERROR_STDERR"},
+			},
 		},
 		Before: func(ctx *cli.Context) error {
 			if err := store.Init(store.Endpoint(ctx.String("store.endpoint"))); err != nil {
 				return cli.Exit(err, 1)
 			}
 
+			if err := util.InitFatalLogWriter(ctx.String("log.error-file"), ctx.Bool("log.error-stderr")); err != nil {
+				msg := fmt.Sprintf("Unable to initialize fatal log writer: %v", err)
+				return cli.Exit(msg, 1)
+			}
+
+			return nil
+		},
+		After: func(ctx *cli.Context) error {
+			util.CloseLogWriter()
 			return nil
 		},
 		Commands: []*cli.Command{
@@ -70,7 +95,8 @@ func main() {
 							configs, err := config.List(ctx.Args().First())
 
 							if err != nil {
-								return cli.Exit(err, 1)
+								err := util.HumanizeError(err, "Unable to list known configs")
+								return cli.Exit(err.Humanize(), 1)
 							}
 
 							fmt.Println()
@@ -105,14 +131,16 @@ func main() {
 						Action: func(ctx *cli.Context) error {
 							c, err := config.Get(ctx.Args().First())
 							if err != nil {
-								return cli.Exit(err, 1)
+								err := util.HumanizeError(err, "Unable to get given config")
+								return cli.Exit(err.Humanize(), 1)
 							}
 
 							switch ctx.String("output") {
 							case "yaml":
 								m, err := yaml.Marshal(c)
 								if err != nil {
-									return cli.Exit(fmt.Errorf("marshaling config to YAML: %w", err), 1)
+									err := util.HumanizeError(err, "Unable to convert config to YAML")
+									return cli.Exit(err.Humanize(), 1)
 								}
 
 								fmt.Println(string(m))
@@ -129,12 +157,14 @@ func main() {
 								}
 
 								if err != nil {
-									return cli.Exit(fmt.Errorf("marshaling config to JSON: %w", err), 1)
+									err := util.HumanizeError(err, "Unable to convert config to JSON")
+									return cli.Exit(err.Humanize(), 1)
 								}
 
 								fmt.Println(string(m))
 							default:
-								return cli.Exit(fmt.Sprintf("unrecognized output format '%s'\n", ctx.String("output")), 1)
+								err := util.HumanizeError(fmt.Errorf("unrecognized output format %s", ctx.String("output")), "")
+								return cli.Exit(err.Humanize(), 1)
 							}
 
 							return nil
@@ -151,13 +181,14 @@ func main() {
 						},
 						Action: func(ctx *cli.Context) error {
 							if ctx.Args().Len() == 0 {
-								return cli.Exit("no config files provided", 1)
+								return cli.Exit("No config file(s) provided", 1)
 							}
 
 							for _, f := range ctx.Args().Slice() {
 								c, err := config.Create(f, !ctx.Bool("skip-validation"))
 								if err != nil {
-									return cli.Exit(err, 1)
+									err := util.HumanizeError(err, "Unable to create config "+f)
+									return cli.Exit(err.Humanize(), 1)
 								}
 
 								fmt.Printf("%s/%s config created\n", c.Kind, c.Metadata.Name)
@@ -173,10 +204,11 @@ func main() {
 							c, err := config.Edit(ctx.Args().First())
 							if err != nil {
 								if config.IsConfigNotModified(err) {
-									return cli.Exit("no changes made to config", 0)
+									return cli.Exit("No changes made to config", 0)
 								}
 
-								return cli.Exit(err, 1)
+								err := util.HumanizeError(err, "Unable to edit given config")
+								return cli.Exit(err.Humanize(), 1)
 							}
 
 							fmt.Printf("%s/%s config updated\n", c.Kind, c.Metadata.Name)
@@ -189,12 +221,13 @@ func main() {
 						Usage: "delete phenix config(s)",
 						Action: func(ctx *cli.Context) error {
 							if ctx.Args().Len() == 0 {
-								return cli.Exit("no config(s) provided", 1)
+								return cli.Exit("No config(s) provided", 1)
 							}
 
 							for _, c := range ctx.Args().Slice() {
 								if err := config.Delete(c); err != nil {
-									return cli.Exit(err, 1)
+									err := util.HumanizeError(err, "Unable to delete config "+c)
+									return cli.Exit(err.Humanize(), 1)
 								}
 
 								fmt.Printf("%s deleted\n", c)
@@ -210,6 +243,34 @@ func main() {
 				Aliases: []string{"exp"},
 				Usage:   "phenix experiment management",
 				Subcommands: []*cli.Command{
+					{
+						Name:  "apps",
+						Usage: "list available experiment apps",
+						Action: func(ctx *cli.Context) error {
+							apps := app.List()
+
+							if len(apps) == 0 {
+								fmt.Printf("\nApps: none\n\n")
+							}
+
+							fmt.Printf("\nApps: %s\n\n", strings.Join(apps, ", "))
+							return nil
+						},
+					},
+					{
+						Name:  "schedulers",
+						Usage: "list available experiment schedulers",
+						Action: func(ctx *cli.Context) error {
+							schedulers := scheduler.List()
+
+							if len(schedulers) == 0 {
+								fmt.Printf("\nSchedulers: none\n\n")
+							}
+
+							fmt.Printf("\nSchedulers: %s\n\n", strings.Join(schedulers, ", "))
+							return nil
+						},
+					},
 					{
 						Name:  "list",
 						Usage: "list all experiments",
@@ -297,10 +358,20 @@ func main() {
 						},
 					},
 					{
-						Name:  "start",
-						Usage: "start an experiment",
+						Name:      "schedule",
+						Usage:     "schedule an experiment",
+						ArgsUsage: "<exp> <algorithm>",
 						Action: func(ctx *cli.Context) error {
-							if err := experiment.Start(ctx.Args().First()); err != nil {
+							if ctx.Args().Len() != 2 {
+								return cli.Exit("must provide all arguments", 1)
+							}
+
+							var (
+								exp  = ctx.Args().Get(0)
+								algo = ctx.Args().Get(1)
+							)
+
+							if err := experiment.Schedule(exp, algo); err != nil {
 								return cli.Exit(err, 1)
 							}
 
@@ -308,10 +379,22 @@ func main() {
 						},
 					},
 					{
-						Name:  "stop",
-						Usage: "stop an experiment",
+						Name:      "start",
+						Usage:     "start an experiment",
+						ArgsUsage: "[flags] <exp>",
+						Flags: []cli.Flag{
+							&cli.BoolFlag{
+								Name:  "dry-run",
+								Usage: "do everything but actually call out to minimega",
+							},
+						},
 						Action: func(ctx *cli.Context) error {
-							if err := experiment.Stop(ctx.Args().First()); err != nil {
+							var (
+								exp    = ctx.Args().First()
+								dryrun = ctx.Bool("dry-run")
+							)
+
+							if err := experiment.Start(exp, dryrun); err != nil {
 								return cli.Exit(err, 1)
 							}
 
@@ -319,14 +402,49 @@ func main() {
 						},
 					},
 					{
-						Name:  "restart",
-						Usage: "restart an experiment",
+						Name:      "stop",
+						Usage:     "stop an experiment",
+						ArgsUsage: "[flags] <exp>",
+						Flags: []cli.Flag{
+							&cli.BoolFlag{
+								Name:  "dry-run",
+								Usage: "do everything but actually call out to minimega",
+							},
+						},
 						Action: func(ctx *cli.Context) error {
-							if err := experiment.Stop(ctx.Args().First()); err != nil {
+							var (
+								exp    = ctx.Args().First()
+								dryrun = ctx.Bool("dry-run")
+							)
+
+							if err := experiment.Stop(exp, dryrun); err != nil {
 								return cli.Exit(err, 1)
 							}
 
-							if err := experiment.Start(ctx.Args().First()); err != nil {
+							return nil
+						},
+					},
+					{
+						Name:      "restart",
+						Usage:     "restart an experiment",
+						ArgsUsage: "[flags] <exp>",
+						Flags: []cli.Flag{
+							&cli.BoolFlag{
+								Name:  "dry-run",
+								Usage: "do everything but actually call out to minimega",
+							},
+						},
+						Action: func(ctx *cli.Context) error {
+							var (
+								exp    = ctx.Args().First()
+								dryrun = ctx.Bool("dry-run")
+							)
+
+							if err := experiment.Stop(exp, dryrun); err != nil {
+								return cli.Exit(err, 1)
+							}
+
+							if err := experiment.Start(exp, dryrun); err != nil {
 								return cli.Exit(err, 1)
 							}
 
@@ -633,26 +751,31 @@ func main() {
 								Name:    "size",
 								Aliases: []string{"z"},
 								Usage:   "image size to use",
+								Value:   "5G",
 							},
 							&cli.StringFlag{
 								Name:    "variant",
 								Aliases: []string{"v"},
 								Usage:   "image variant to use",
+								Value:   "minbase",
 							},
 							&cli.StringFlag{
 								Name:    "release",
 								Aliases: []string{"r"},
-								Usage:   "os release codename (defaults to bionic)",
+								Usage:   "os release codename",
+								Value:   "bionic",
 							},
 							&cli.StringFlag{
 								Name:    "mirror",
 								Aliases: []string{"m"},
-								Usage:   "debootstrap mirror (must match release, defaults to http://us.archive.ubuntu.com/ubuntu/)",
+								Usage:   "debootstrap mirror (must match release)",
+								Value:   "http://us.archive.ubuntu.com/ubuntu/",
 							},
 							&cli.StringFlag{
 								Name:    "format",
 								Aliases: []string{"f"},
-								Usage:   "format of disk image (defaults to raw)",
+								Usage:   "format of disk image",
+								Value:   "raw",
 							},
 							&cli.BoolFlag{
 								Name:    "compress",
@@ -675,9 +798,9 @@ func main() {
 								Usage:   "list of scripts to include in addition to the default one (separated by comma)",
 							},
 							&cli.StringFlag{
-								Name:    "debootstrap_append",
+								Name:    "debootstrap-append",
 								Aliases: []string{"d"},
-								Usage:   "additional arguments to debootstrap",
+								Usage:   "additional arguments to debootstrap (default: --components=main,restricted,universe,multiverse)",
 							},
 						},
 						Action: func(ctx *cli.Context) error {
@@ -690,7 +813,7 @@ func main() {
 							img.Mirror = ctx.String("mirror")
 							img.Format = v1.Format(ctx.String("format"))
 							img.Compress = ctx.Bool("compress")
-							img.DebAppend = ctx.String("debootstrap_append")
+							img.DebAppend = ctx.String("debootstrap-append")
 
 							if overlays := ctx.String("overlays"); overlays != "" {
 								img.Overlays = strings.Split(overlays, ",")
@@ -868,7 +991,7 @@ func main() {
 					{
 						Name:      "remove",
 						Usage:     "remove scripts, packages, and/or overlays from an image build config",
-						ArgsUsage: "[flags] <name>>",
+						ArgsUsage: "[flags] <name>",
 						Flags: []cli.Flag{
 							&cli.StringFlag{
 								Name:    "overlays",
@@ -901,6 +1024,165 @@ func main() {
 							if err := image.Remove(name, overlays, packages, scripts); err != nil {
 								return cli.Exit(err, 1)
 							}
+
+							return nil
+						},
+					},
+				},
+			},
+			{
+				Name:  "vlan",
+				Usage: "phenix VLAN management",
+				Subcommands: []*cli.Command{
+					{
+						Name:      "alias",
+						Usage:     "view or set VLAN alias",
+						ArgsUsage: "[flags] [experiment] [alias] [vlan]",
+						Flags: []cli.Flag{
+							&cli.BoolFlag{
+								Name:    "force",
+								Aliases: []string{"f"},
+								Usage:   "force update on set action if alias already exists",
+							},
+						},
+						Action: func(ctx *cli.Context) error {
+							switch ctx.NArg() {
+							case 0:
+								info, err := vlan.Aliases()
+								if err != nil {
+									return cli.Exit(err, 1)
+								}
+
+								util.PrintTableOfVLANAliases(os.Stdout, info)
+							case 1:
+								info, err := vlan.Aliases(vlan.Experiment(ctx.Args().First()))
+								if err != nil {
+									return cli.Exit(err, 1)
+								}
+
+								util.PrintTableOfVLANAliases(os.Stdout, info)
+							case 3:
+								var (
+									exp   = ctx.Args().Get(0)
+									alias = ctx.Args().Get(1)
+									id    = ctx.Args().Get(2)
+									force = ctx.Bool("force")
+								)
+
+								vid, err := strconv.Atoi(id)
+								if err != nil {
+									return cli.Exit("VLAN ID provided not a valid integer", 1)
+								}
+
+								if err := vlan.SetAlias(vlan.Experiment(exp), vlan.Alias(alias), vlan.ID(vid), vlan.Force(force)); err != nil {
+									return cli.Exit(err, 1)
+								}
+							default:
+								return cli.Exit("unexpected number of arguments provided", 1)
+							}
+
+							return nil
+						},
+					},
+					{
+						Name:      "range",
+						Usage:     "view or set VLAN range",
+						ArgsUsage: "[flags] [experiment] [min] [max]",
+						Flags: []cli.Flag{
+							&cli.BoolFlag{
+								Name:    "force",
+								Aliases: []string{"f"},
+								Usage:   "force update on set action if range is already set",
+							},
+						},
+						Action: func(ctx *cli.Context) error {
+							switch ctx.NArg() {
+							case 0:
+								info, err := vlan.Ranges()
+								if err != nil {
+									return cli.Exit(err, 1)
+								}
+
+								util.PrintTableOfVLANRanges(os.Stdout, info)
+							case 1:
+								info, err := vlan.Ranges(vlan.Experiment(ctx.Args().First()))
+								if err != nil {
+									return cli.Exit(err, 1)
+								}
+
+								util.PrintTableOfVLANRanges(os.Stdout, info)
+							case 3:
+								var (
+									exp   = ctx.Args().Get(0)
+									min   = ctx.Args().Get(1)
+									max   = ctx.Args().Get(2)
+									force = ctx.Bool("force")
+								)
+
+								vmin, err := strconv.Atoi(min)
+								if err != nil {
+									return cli.Exit("VLAN min ID provided not a valid integer", 1)
+								}
+
+								vmax, err := strconv.Atoi(max)
+								if err != nil {
+									return cli.Exit("VLAN max ID provided not a valid integer", 1)
+								}
+
+								if err := vlan.SetRange(vlan.Experiment(exp), vlan.Min(vmin), vlan.Max(vmax), vlan.Force(force)); err != nil {
+									return cli.Exit(err, 1)
+								}
+							default:
+								return cli.Exit("unexpected number of arguments provided", 1)
+							}
+
+							return nil
+						},
+					},
+				},
+			},
+			{
+				Name:    "util",
+				Usage:   "phenix utility commands",
+				Subcommands: []*cli.Command{
+					{
+						Name:  "app-json",
+						Usage: "print application JSON input for given experiment to STDOUT",
+						ArgsUsage: "<experiment>",
+						Flags: []cli.Flag{
+							&cli.BoolFlag{
+								Name:    "pretty",
+								Aliases: []string{"p"},
+								Usage:   "pretty print JSON output",
+							},
+						},
+						Action: func(ctx *cli.Context) error {
+							name := ctx.Args().First()
+
+							if name == "" {
+								return cli.Exit("no experiment provided", 1)
+							}
+
+							exp, err := experiment.Get(name)
+							if err != nil {
+								err := util.HumanizeError(err, "Unable to get provided experiment " + name)
+								return cli.Exit(err.Humanize(), 1)
+							}
+
+							var m []byte
+
+							if ctx.Bool("pretty") {
+								m, err = json.MarshalIndent(exp, "", "  ")
+							} else {
+								m, err = json.Marshal(exp)
+							}
+
+							if err != nil {
+								err := util.HumanizeError(err, "Unable to convert experiment to JSON")
+								return cli.Exit(err.Humanize(), 1)
+							}
+
+							fmt.Println(string(m))
 
 							return nil
 						},

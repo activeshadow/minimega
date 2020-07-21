@@ -1,69 +1,97 @@
 apiVersion: phenix.sandia.gov/v1
 kind: Topology
 metadata:
-  name: foo-bar-topo
+  name: foobar
 spec:
   nodes:
   - type: VirtualMachine
     general:
-      hostname: turbine-01
+      hostname: host-00
       snapshot: true
     hardware:
       os_type: linux
       drives:
-      - image: bennu.qc2
+      - image: miniccc.qc2
+    injections:
+      - src: foo/bar/sucka.fish
+        dst: /data/sucka.fish
+      - src: /foo/bar/sucka/fish.sh
+        dst: /data/fish.sh
     network:
       interfaces:
       - name: IF0
-        vlan: ot
+        vlan: corp
         address: 192.168.10.1
-        mask: 24.
+        mask: 24
         gateway: 192.168.10.254
         proto: static
         type: ethernet
-      - name: mgmt
+      - name: IF1
         vlan: MGMT
         address: 172.16.10.1
-        mask: 16.
+        mask: 16
         proto: static
         type: ethernet
   - type: VirtualMachine
     general:
-      hostname: turbine-02
+      hostname: host-01
       snapshot: true
     hardware:
       os_type: linux
       drives:
-      - image: bennu.qc2
+      - image: miniccc.qc2
     network:
       interfaces:
       - name: IF0
-        vlan: ot
+        vlan: corp
         address: 192.168.10.2
-        mask: 24.
+        mask: 24
         gateway: 192.168.10.254
         proto: static
         type: ethernet
-      - name: mgmt
+      - name: IF1
         vlan: MGMT
         address: 172.16.10.2
-        mask: 16.
+        mask: 16
         proto: static
         type: ethernet
       - name: S0
         vlan: foobar
         address: 10.0.0.1
-        mask: 24.
+        mask: 24
         proto: static
         type: serial
-        udp_port: 8989.
-        baud_rate: 9600.
+        udp_port: 8989
+        baud_rate: 9600
         device: /dev/ttyS0
+  - type: VirtualMachine
+    general:
+      hostname: AD1
+      snapshot: true
+    hardware:
+      os_type: windows
+      drives:
+      - image: win-svr-2k8.qc2
+    network:
+      interfaces:
+      - name: IF0
+        vlan: corp
+        address: 192.168.10.250
+        mask: 24
+        gateway: 192.168.10.254
+        proto: static
+        type: ethernet
+      - name: IF1
+        vlan: MGMT
+        address: 172.16.10.3
+        mask: 16
+        proto: static
+        type: ethernet
   - type: Router
     labels:
       ntp-server: "true"
     general:
-      hostname: router-01
+      hostname: router-00
       snapshot: true
     hardware:
       os_type: linux
@@ -72,20 +100,25 @@ spec:
     network:
       interfaces:
       - name: IF0
-        vlan: mgmt
-        address: 172.16.10.254
-        mask: 16.
+        vlan: corp
+        address: 192.168.10.254
+        mask: 24
         proto: static
         type: ethernet
         ruleset_in: test
+      - name: IF1
+        vlan: MGMT
+        address: 172.16.10.254
+        mask: 16
+        proto: static
+        type: ethernet
       rulesets:
       - name: test
         default: drop
         rules:
-        - id: 10.
+        - id: 10
           action: accept
           protocol: all
           source:
             address: 1.1.1.1
-            port: 53.
-        
+            port: 53

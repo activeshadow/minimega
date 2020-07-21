@@ -2,13 +2,22 @@ package v1
 
 type TopologySpec struct {
 	Nodes []*Node `json:"nodes" yaml:"nodes"`
-	VLANs []*VLAN `json:"vlans,omitempty" yaml:"vlans,omitempty" structs:"vlans,omitempty"`
 }
 
 func (this *TopologySpec) SetDefaults() {
 	for _, n := range this.Nodes {
 		n.SetDefaults()
 	}
+}
+
+func (this TopologySpec) FindNodeByName(name string) *Node {
+	for _, node := range this.Nodes {
+		if node.General.Hostname == name {
+			return node
+		}
+	}
+
+	return nil
 }
 
 // FindNodesWithLabels finds all nodes in the topology containing at least one

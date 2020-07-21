@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"phenix/tmpl"
+	"phenix/types"
 	v1 "phenix/types/version/v1"
 )
 
@@ -18,30 +19,30 @@ func (Startup) Name() string {
 	return "startup"
 }
 
-func (this *Startup) Configure(spec *v1.ExperimentSpec) error {
-	startupDir := spec.BaseDir + "/startup"
+func (this *Startup) Configure(exp *types.Experiment) error {
+	startupDir := exp.Spec.BaseDir + "/startup"
 
-	for _, node := range spec.Topology.Nodes {
+	for _, node := range exp.Spec.Topology.Nodes {
 		// if type is router, skip it and continue
 		if node.Type == "Router" {
 			continue
 		}
 
-		// loop through nodes
-		if node.Hardware.OSType == v1.OSType_Linux || node.Hardware.OSType == v1.OSType_RHEL || node.Hardware.OSType == v1.OSType_CentOS {
-			var keep []*v1.Injection
+		var keep []*v1.Injection
 
-			// delete any exisitng interface injections
-			for _, inject := range node.Injections {
-				if inject.Dst == "interfaces" || inject.Dst == "startup.ps1" {
-					continue
-				}
-
-				keep = append(keep, inject)
+		// delete any exisitng interface injections
+		for _, inject := range node.Injections {
+			if inject.Dst == "interfaces" || inject.Dst == "startup.ps1" {
+				continue
 			}
 
-			node.Injections = keep
+			keep = append(keep, inject)
+		}
 
+		node.Injections = keep
+
+		// loop through nodes
+		if node.Hardware.OSType == v1.OSType_Linux || node.Hardware.OSType == v1.OSType_RHEL || node.Hardware.OSType == v1.OSType_CentOS {
 			// if vm is centos or rhel, need a separate file per interface
 			if node.Hardware.OSType == v1.OSType_RHEL || node.Hardware.OSType == v1.OSType_CentOS {
 				for idx := range node.Network.Interfaces {
@@ -75,38 +76,38 @@ func (this *Startup) Configure(spec *v1.ExperimentSpec) error {
 				}
 
 				node.Injections = append(node.Injections, a, b, c)
-			} else if node.Hardware.OSType == v1.OSType_Windows {
-				var (
-					startupFile = startupDir + "/" + node.General.Hostname + "-startup.ps1"
-					schedFile   = startupDir + "/startup-scheduler.cmd"
-				)
-
-				a := &v1.Injection{
-					Src: startupFile,
-					Dst: "startup.ps1",
-				}
-				b := &v1.Injection{
-					Src: schedFile,
-					Dst: "ProgramData/Microsoft/Windows/Start Menu/Programs/StartUp/startup_scheduler.cmd",
-				}
-
-				node.Injections = append(node.Injections, a, b)
 			}
+		} else if node.Hardware.OSType == v1.OSType_Windows {
+			var (
+				startupFile = startupDir + "/" + node.General.Hostname + "-startup.ps1"
+				schedFile   = startupDir + "/startup-scheduler.cmd"
+			)
+
+			a := &v1.Injection{
+				Src: startupFile,
+				Dst: "startup.ps1",
+			}
+			b := &v1.Injection{
+				Src: schedFile,
+				Dst: "ProgramData/Microsoft/Windows/Start Menu/Programs/StartUp/startup_scheduler.cmd",
+			}
+
+			node.Injections = append(node.Injections, a, b)
 		}
 	}
 
 	return nil
 }
 
-func (this Startup) Start(spec *v1.ExperimentSpec) error {
+func (this Startup) PreStart(exp *types.Experiment) error {
 	// note in the mako file that there does not appear to be timezone or hostname for rhel and centos
-	startupDir := spec.BaseDir + "/startup"
+	startupDir := exp.Spec.BaseDir + "/startup"
 
 	if err := os.MkdirAll(startupDir, 0755); err != nil {
 		return fmt.Errorf("creating experiment startup directory path: %w", err)
 	}
 
-	for _, node := range spec.Topology.Nodes {
+	for _, node := range exp.Spec.Topology.Nodes {
 		// if type is router, skip it and continue
 		if node.Type == "Router" {
 			continue
@@ -156,10 +157,10 @@ func (this Startup) Start(spec *v1.ExperimentSpec) error {
 	return nil
 }
 
-func (Startup) PostStart(spec *v1.ExperimentSpec) error {
+func (Startup) PostStart(exp *types.Experiment) error {
 	return nil
 }
 
-func (Startup) Cleanup(spec *v1.ExperimentSpec) error {
+func (Startup) Cleanup(exp *types.Experiment) error {
 	return nil
 }

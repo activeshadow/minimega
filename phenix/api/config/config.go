@@ -8,6 +8,7 @@ import (
 	"phenix/store"
 	"phenix/types"
 	v1 "phenix/types/version/v1"
+	"phenix/util"
 	"phenix/util/editor"
 
 	"github.com/mitchellh/mapstructure"
@@ -36,7 +37,7 @@ func List(which string) (types.Configs, error) {
 	case "image":
 		configs, err = store.List("Image")
 	default:
-		return nil, fmt.Errorf("unknown config kind provided")
+		return nil, util.HumanizeError(fmt.Errorf("unknown config kind provided: %s", which), "")
 	}
 
 	if err != nil {
@@ -54,6 +55,10 @@ func List(which string) (types.Configs, error) {
 // generic `map[string]interface{}` fields. It's up to the caller to convert
 // these fields into the appropriate types.
 func Get(name string) (*types.Config, error) {
+	if name == "" {
+		return nil, util.HumanizeError(fmt.Errorf("no config name provided"), "")
+	}
+
 	c, err := types.NewConfig(name)
 	if err != nil {
 		return nil, err
@@ -82,7 +87,7 @@ func Create(path string, validate bool) (*types.Config, error) {
 		return nil, fmt.Errorf("creating new config from file: %w", err)
 	}
 
-	if c.Kind == "Experiment" && c.Spec == nil {
+	if c.Kind == "Experiment" {
 		if err := experiment.CreateFromConfig(c); err != nil {
 			return nil, fmt.Errorf("creating experiment config spec: %w", err)
 		}
@@ -111,6 +116,10 @@ func Create(path string, validate bool) (*types.Config, error) {
 // `IsConfigNotModified` function. It returns the updated config and any errors
 // encountered while editing the config.
 func Edit(name string) (*types.Config, error) {
+	if name == "" {
+		return nil, fmt.Errorf("no config name provided")
+	}
+
 	c, err := types.NewConfig(name)
 	if err != nil {
 		return nil, err
@@ -163,6 +172,10 @@ func Edit(name string) (*types.Config, error) {
 // are removed. It returns any errors encountered while removing the config from
 // the store.
 func Delete(name string) error {
+	if name == "" {
+		return fmt.Errorf("no config name provided")
+	}
+
 	if name == "all" {
 		configs, _ := List("all")
 

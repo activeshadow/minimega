@@ -1,6 +1,9 @@
-docs/bindata.go
-docs/site
+.devcontainer
+.vscode
 
 phenix.bdb
+phenix.err
+
+mock.go
 
 tmpl/bindata.go

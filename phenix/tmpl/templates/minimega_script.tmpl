@@ -1,10 +1,22 @@
 namespace {{ .ExperimentName }}
 ns queueing true
 
-{{- if .RunLocal -}}
+{{ if and (ne .VLANs.Min 0) (ne .VLANs.Max 0) }}
+vlans range {{ .VLANs.Min }} {{ .VLANs.Max }}
+{{- end }}
+
+{{- range $alias, $id := .VLANs.Aliases }}
+  {{ if ne $id 0 }}
+vlans add {{ $alias }} {{ $id }}
+  {{- end }}
+{{- end }}
+
+{{ if .RunLocal }}
 ns del-host all
 ns add-host localhost
-{{- end -}}
+{{- end }}
+
+{{ $basedir := .BaseDir }}
 
 {{- range .Topology.Nodes }}
 {{/* added space to place hostname above relevant block */}}
@@ -13,7 +25,7 @@ ns add-host localhost
     {{ $firstDrive := index .Hardware.Drives 0 }}
 disk snapshot {{ $firstDrive.Image }} {{ $.SnapshotName .General.Hostname }} 
         {{- if gt (len .Injections) 0 }}
-disk inject {{ $.SnapshotName .General.Hostname  }}:{{ $firstDrive.GetInjectPartition }} files {{ .FileInjects }}
+disk inject {{ $.SnapshotName .General.Hostname }}:{{ $firstDrive.GetInjectPartition }} files {{ .FileInjects $basedir }}
         {{- end }}
     {{- end }}
 clear vm config

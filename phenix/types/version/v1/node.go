@@ -41,15 +41,14 @@ type Node struct {
 	Hardware   Hardware     `json:"hardware" yaml:"hardware"`
 	Network    Network      `json:"network" yaml:"network"`
 	Injections []*Injection `json:"injections" yaml:"injections"`
-	Metadata   Metadata     `json:"metadata" yaml:"metadata"`
 }
 
 type General struct {
 	Hostname    string `json:"hostname" yaml:"hostname"`
 	Description string `json:"description" yaml:"description"`
 	VMType      VMType `json:"vm_type" yaml:"vm_type" mapstructure:"vm_type"`
-	Snapshot    bool   `json:"snapshot" yaml:"snapshot"`
-	DoNotBoot   bool   `json:"do_not_boot" yaml:"do_not_boot"`
+	Snapshot    *bool  `json:"snapshot" yaml:"snapshot"`
+	DoNotBoot   *bool  `json:"do_not_boot" yaml:"do_not_boot" structs:"do_not_boot" mapstructure:"do_not_boot"`
 }
 
 type Hardware struct {
@@ -78,6 +77,16 @@ func (this *Node) SetDefaults() {
 		this.General.VMType = VMType_KVM
 	}
 
+	if this.General.Snapshot == nil {
+		snapshot := true
+		this.General.Snapshot = &snapshot
+	}
+
+	if this.General.DoNotBoot == nil {
+		dnb := false
+		this.General.DoNotBoot = &dnb
+	}
+
 	if this.Hardware.CPU == CPU_NotSet {
 		this.Hardware.CPU = CPU_Broadwell
 	}
@@ -95,11 +104,15 @@ func (this *Node) SetDefaults() {
 	}
 }
 
-func (this Node) FileInjects() string {
+func (this Node) FileInjects(basedir string) string {
 	injects := make([]string, len(this.Injections))
 
 	for i, inject := range this.Injections {
-		injects[i] = inject.Src + ":" + inject.Dst
+		if strings.HasPrefix(inject.Src, "/") {
+			injects[i] = inject.Src + ":" + inject.Dst
+		} else {
+			injects[i] = basedir + "/" + inject.Src + ":" + inject.Dst
+		}
 	}
 
 	return strings.Join(injects, " ")

@@ -14,7 +14,7 @@ import (
 	"phenix/tmpl"
 	"phenix/types"
 	v1 "phenix/types/version/v1"
-	"phenix/util"
+	"phenix/util/shell"
 
 	"github.com/activeshadow/structs"
 	"github.com/mitchellh/mapstructure"
@@ -59,9 +59,17 @@ func SetDefaults(img *v1.Image) error {
 		img.Format = "raw"
 	}
 
+	if !strings.Contains(img.DebAppend, "--components=") {
+		if img.Release == "kali" || img.Release == "kali-rolling" {
+			img.DebAppend += " --components=" + strings.Join(PACKAGES_COMPONENTS_KALI, ",")
+		} else {
+			img.DebAppend += " --components=" + strings.Join(PACKAGES_COMPONENTS, ",")
+		}
+	}
+
 	switch img.Variant {
 	case "minbase":
-		if img.Release == "kali" {
+		if img.Release == "kali" || img.Release == "kali-rolling" {
 			img.Packages = append(img.Packages, PACKAGES_DEFAULT...)
 			img.Packages = append(img.Packages, PACKAGES_KALI...)
 		} else {
@@ -69,7 +77,7 @@ func SetDefaults(img *v1.Image) error {
 			img.Packages = append(img.Packages, PACKAGES_BIONIC...)
 		}
 	case "mingui":
-		if img.Release == "kali" {
+		if img.Release == "kali" || img.Release == "kali-rolling" {
 			img.Packages = append(img.Packages, PACKAGES_DEFAULT...)
 			img.Packages = append(img.Packages, PACKAGES_KALI...)
 			img.Packages = append(img.Packages, PACKAGES_MINGUI...)
@@ -78,10 +86,14 @@ func SetDefaults(img *v1.Image) error {
 			img.Packages = append(img.Packages, PACKAGES_DEFAULT...)
 			img.Packages = append(img.Packages, PACKAGES_BIONIC...)
 			img.Packages = append(img.Packages, PACKAGES_MINGUI...)
-			img.Packages = append(img.Packages, PACKAGES_MINGUI_BIONIC...)
+			if img.Release == "xenial" {
+				img.Packages = append(img.Packages, "qupzilla")
+			} else {
+				img.Packages = append(img.Packages, "falkon")
+			}
 		}
 	case "brash":
-		if img.Release == "kali" {
+		if img.Release == "kali" || img.Release == "kali-rolling" {
 			img.Packages = append(img.Packages, PACKAGES_DEFAULT...)
 			img.Packages = append(img.Packages, PACKAGES_KALI...)
 			img.Packages = append(img.Packages, PACKAGES_BRASH...)
@@ -227,6 +239,11 @@ func Build(name, verbosity string, cache bool) error {
 
 	img.Cache = cache
 
+	// The Kali package repos use `kali-rolling` as the release name.
+	if img.Release == "kali" {
+		img.Release = "kali-rolling"
+	}
+
 	dir := "/phenix/images"
 	filename := dir + "/" + name + ".vmdb"
 
@@ -234,7 +251,7 @@ func Build(name, verbosity string, cache bool) error {
 		return fmt.Errorf("generate vmdb config from template: %w", err)
 	}
 
-	if !util.ShellCommandExists("vmdb2") {
+	if !shell.CommandExists("vmdb2") {
 		return fmt.Errorf("vmdb2 app does not exist in your path")
 	}
 
