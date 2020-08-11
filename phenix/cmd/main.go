@@ -36,7 +36,9 @@ func init() {
 
 func main() {
 	app := &cli.App{
-		Name:    "phenix",
+		Name:      "phenix",
+		Usage:     "A cli application for phenix",
+		UsageText: "phenix [global options]\n     or\n   phenix command", // do we want to present this way when there are two options?
 		Version: version.Version,
 		Flags: []cli.Flag{
 			&cli.StringFlag{
@@ -84,25 +86,29 @@ func main() {
 		},
 		Commands: []*cli.Command{
 			{
-				Name:    "config",
-				Aliases: []string{"cfg"},
-				Usage:   "phenix config management",
+				Name:        "config",
+				Usage:       "Configuration management",
+				UsageText:   "phenix config [options] *OR* phenix config command", // not showing up as expected
+				Description: "Used to manage the three kinds of configurations; kind can be topology, experiment, or scenario",
+				Aliases:     []string{"cfg"},
 				Subcommands: []*cli.Command{
 					{
-						Name:  "list",
-						Usage: "list known phenix configs",
+						Name:        "list",
+						Usage:       "Table of configuration(s)",
+						UsageText:   "phenix config list",
+						Description: "Used to display a table of available configurations",
 						Action: func(ctx *cli.Context) error {
 							configs, err := config.List(ctx.Args().First())
 
 							if err != nil {
-								err := util.HumanizeError(err, "Unable to list known configs")
+								err := util.HumanizeError(err, "Unable to list known configurations")
 								return cli.Exit(err.Humanize(), 1)
 							}
 
 							fmt.Println()
 
 							if len(configs) == 0 {
-								fmt.Println("no configs currently exist")
+								fmt.Println("There are no configurations available")
 							} else {
 								util.PrintTableOfConfigs(os.Stdout, configs)
 							}
@@ -113,25 +119,27 @@ func main() {
 						},
 					},
 					{
-						Name:  "get",
-						Usage: "get phenix config",
+						Name:        "get",
+						Usage:       "Get a configuration",
+						UsageText:   "phenix config get [options] <config kind>/<config name>",
+						Description: "Used to get a specific configuration; kind can be topology, experiment, or scenario",
 						Flags: []cli.Flag{
 							&cli.StringFlag{
 								Name:    "output",
 								Aliases: []string{"o"},
-								Usage:   "output format (yaml, json)",
+								Usage:   "Configuration output format can be YAML or JSON",
 								Value:   "yaml",
 							},
 							&cli.BoolFlag{
 								Name:    "pretty",
 								Aliases: []string{"p"},
-								Usage:   "pretty print JSON output",
+								Usage:   "Pretty print the JSON output",
 							},
 						},
 						Action: func(ctx *cli.Context) error {
 							c, err := config.Get(ctx.Args().First())
 							if err != nil {
-								err := util.HumanizeError(err, "Unable to get given config")
+								err := util.HumanizeError(err, "Unable to get the " + c.Kind + "/" + c.Metadata.Name + " configuration") // do we want to give the name used instead of given
 								return cli.Exit(err.Humanize(), 1)
 							}
 
@@ -139,7 +147,7 @@ func main() {
 							case "yaml":
 								m, err := yaml.Marshal(c)
 								if err != nil {
-									err := util.HumanizeError(err, "Unable to convert config to YAML")
+									err := util.HumanizeError(err, "Unable to convert configuration to YAML")
 									return cli.Exit(err.Humanize(), 1)
 								}
 
@@ -157,80 +165,85 @@ func main() {
 								}
 
 								if err != nil {
-									err := util.HumanizeError(err, "Unable to convert config to JSON")
+									err := util.HumanizeError(err, "Unable to convert configuration to JSON")
 									return cli.Exit(err.Humanize(), 1)
 								}
 
 								fmt.Println(string(m))
 							default:
-								err := util.HumanizeError(fmt.Errorf("unrecognized output format %s", ctx.String("output")), "")
-								return cli.Exit(err.Humanize(), 1)
+								return cli.Exit(fmt.Sprintf("Unrecognized output format '%s'\n", ctx.String("output")), 1)
 							}
 
 							return nil
 						},
 					},
 					{
-						Name:  "create",
-						Usage: "create phenix config(s)",
+						Name:        "create",
+						Usage:       "Create a configuration",
+						UsageText:   "phenix config create [options] </path/to/filename(s)>",
+						Description: "Used to create a configuration from file(s); file types can be yaml or json",
 						Flags: []cli.Flag{
 							&cli.BoolFlag{
 								Name:  "skip-validation",
-								Usage: "skip config spec validation against schema",
+								Usage: "Skip configuration spec validation against schema",
 							},
 						},
 						Action: func(ctx *cli.Context) error {
 							if ctx.Args().Len() == 0 {
-								return cli.Exit("No config file(s) provided", 1)
+								return cli.Exit("No configuration file(s) were provided", 1)
 							}
 
 							for _, f := range ctx.Args().Slice() {
 								c, err := config.Create(f, !ctx.Bool("skip-validation"))
 								if err != nil {
-									err := util.HumanizeError(err, "Unable to create config "+f)
+									err := util.HumanizeError(err, "Unable to create configuration "+f)
 									return cli.Exit(err.Humanize(), 1)
 								}
 
-								fmt.Printf("%s/%s config created\n", c.Kind, c.Metadata.Name)
+								fmt.Printf("%s/%s configuration was created\n", c.Kind, c.Metadata.Name)
 							}
 
 							return nil
 						},
 					},
 					{
-						Name:  "edit",
-						Usage: "edit phenix config",
+						Name:        "edit",
+						Usage:       "Edit a configuration",
+						UsageText:   "phenix config edit <config kind>/<config name>",
+						Description: "Used to edit a configuration with the default system editor; kind can be topology, experiment, or scenario",
 						Action: func(ctx *cli.Context) error {
 							c, err := config.Edit(ctx.Args().First())
 							if err != nil {
 								if config.IsConfigNotModified(err) {
-									return cli.Exit("No changes made to config", 0)
+									return cli.Exit("The configuration was not updated", 0) // want to add c.Kind, c.Metadata.Name
 								}
 
 								err := util.HumanizeError(err, "Unable to edit given config")
 								return cli.Exit(err.Humanize(), 1)
 							}
 
-							fmt.Printf("%s/%s config updated\n", c.Kind, c.Metadata.Name)
+							fmt.Printf("the %s/%s configuration was updated\n", c.Kind, c.Metadata.Name)
 
 							return nil
 						},
 					},
 					{
-						Name:  "delete",
-						Usage: "delete phenix config(s)",
+						Name:        "delete",
+						Usage:       "Delete a configuration",
+						UsageText:   "phenix config delete <config kind>/<config name>",
+						Description: "Used to delete a configuration; kind can be topology, experiment, or scenario",
 						Action: func(ctx *cli.Context) error {
 							if ctx.Args().Len() == 0 {
-								return cli.Exit("No config(s) provided", 1)
+								return cli.Exit("No configuration(s) were provided", 1)
 							}
 
 							for _, c := range ctx.Args().Slice() {
 								if err := config.Delete(c); err != nil {
-									err := util.HumanizeError(err, "Unable to delete config "+c)
+									err := util.HumanizeError(err, "Unable to delete configuration "+c)
 									return cli.Exit(err.Humanize(), 1)
 								}
 
-								fmt.Printf("%s deleted\n", c)
+								fmt.Printf("%s configuration was deleted\n", c)
 							}
 
 							return nil
@@ -239,9 +252,11 @@ func main() {
 				},
 			},
 			{
-				Name:    "experiment",
-				Aliases: []string{"exp"},
-				Usage:   "phenix experiment management",
+				Name:        "experiment",
+				Usage:       "Experiment management",
+				UsageText:   "phenix experiment [options] <command>", // not showing up as expected
+				Description: "Used to manage experiment(s)",
+				Aliases:     []string{"exp"},
 				Subcommands: []*cli.Command{
 					{
 						Name:  "apps",
@@ -272,8 +287,10 @@ func main() {
 						},
 					},
 					{
-						Name:  "list",
-						Usage: "list all experiments",
+						Name:        "list",
+						Usage:       "Table of experiments",
+						UsageText:   "phenix experiment list",
+						Description: "Used to display a table of available experiments",
 						Action: func(ctx *cli.Context) error {
 							exps, err := experiment.List()
 							if err != nil {
@@ -286,30 +303,32 @@ func main() {
 						},
 					},
 					{
-						Name:  "create",
-						Usage: "create a new experiment",
+						Name:        "create",
+						Usage:       "Create an experiment",
+						UsageText:   "phenix experiment create [options] <experiment name>",
+						Description: "Used to create an experiment from an existing configuration; can be a topology, or topology and scenario",
 						Flags: []cli.Flag{
 							&cli.StringFlag{
 								Name:    "topology",
 								Aliases: []string{"t"},
-								Usage:   "name of existing topology to use",
+								Usage:   "Name of an existing topology to use",
 							},
 							&cli.StringFlag{
 								Name:    "scenario",
 								Aliases: []string{"s"},
-								Usage:   "name of existing scenario to use",
+								Usage:   "Name of an existing scenario to use (optional)",
 							},
 							&cli.StringFlag{
 								Name:    "base-dir",
 								Aliases: []string{"d"},
-								Usage:   "base directory to use for experiment",
+								Usage:   "Base directory to use for experiment",
 							},
 						},
 						Action: func(ctx *cli.Context) error {
 							name := ctx.Args().First()
 
 							if name == "" {
-								return cli.Exit("must provide experiment name", 1)
+								return cli.Exit("Must provide an experiment name", 1)
 							}
 
 							var (
@@ -319,7 +338,7 @@ func main() {
 							)
 
 							if topology == "" {
-								return cli.Exit("must provide topology name", 1)
+								return cli.Exit("Must provide a topology name", 1)
 							}
 
 							if err := experiment.Create(name, topology, scenario, baseDir); err != nil {
@@ -330,40 +349,46 @@ func main() {
 						},
 					},
 					{
-						Name:  "delete",
-						Usage: "delete an experiment",
+						Name:        "delete",
+						Usage:       "Delete an experiment",
+						UsageText:   "phenix experiment delete <experiment name>",
+						Description: "Used to delete an exisitng experiment; experiment must be stopped",
 						Action: func(ctx *cli.Context) error {
 							name := ctx.Args().First()
 
 							if name == "" {
-								return cli.Exit("must provide experiment name", 1)
+								return cli.Exit("Must provide an experiment name", 1)
 							}
 
 							exp, err := experiment.Get(ctx.Args().First())
 							if err != nil {
-								return cli.Exit(err, 1)
+								err := util.HumanizeError(err, "Unable to get experiment " + name)
+								return cli.Exit(err.Humanize(), 1)
 							}
 
 							if exp.Status.Running() {
-								return cli.Exit("cannot delete a running experiment", 1)
+								return cli.Exit("Cannot delete a running experiment", 1)
 							}
 
 							if err := config.Delete("experiment/" + name); err != nil {
-								return cli.Exit(err, 1)
+								err := util.HumanizeError(err, "Unable to delete experiment " + name)
+								return cli.Exit(err.Humanize(), 1)
 							}
 
-							fmt.Printf("experiment %s deleted\n", name)
+							fmt.Printf("THe %s experiment was deleted\n", name)
 
 							return nil
 						},
 					},
 					{
-						Name:      "schedule",
-						Usage:     "schedule an experiment",
-						ArgsUsage: "<exp> <algorithm>",
+						Name:        "schedule",
+						Usage:       "Schedule an experiment",
+						UsageText:   "phenix experiment schedule <experiment name> <algorithm>",
+						Description: "schedule an experiment; possible algorithms are round-robin, subnet-compute, isolate-experiment",
+						ArgsUsage:   "<exp> <algorithm>",
 						Action: func(ctx *cli.Context) error {
 							if ctx.Args().Len() != 2 {
-								return cli.Exit("must provide all arguments", 1)
+								return cli.Exit("Must provide all arguments", 1)
 							}
 
 							var (
@@ -372,20 +397,23 @@ func main() {
 							)
 
 							if err := experiment.Schedule(exp, algo); err != nil {
-								return cli.Exit(err, 1)
+								err := util.HumanizeError(err, "Unable to schedule experiment " + exp)
+								return cli.Exit(err.Humanize(), 1)
 							}
 
 							return nil
 						},
 					},
 					{
-						Name:      "start",
-						Usage:     "start an experiment",
-						ArgsUsage: "[flags] <exp>",
+						Name:        "start",
+						Usage:       "Start an experiment",
+						UsageText:   "phenix experiment start [options] <experiment name>",
+						Description: "Used to start a stopped experiment; dry-run will do everything but call out to minimega", // check to see if exp list shows running experimnet
+						ArgsUsage:   "[flags] <exp>",
 						Flags: []cli.Flag{
 							&cli.BoolFlag{
 								Name:  "dry-run",
-								Usage: "do everything but actually call out to minimega",
+								Usage: "Do everything but actually call out to minimega",
 							},
 						},
 						Action: func(ctx *cli.Context) error {
@@ -395,20 +423,23 @@ func main() {
 							)
 
 							if err := experiment.Start(exp, dryrun); err != nil {
-								return cli.Exit(err, 1)
+								err := util.HumanizeError(err, "Unable to start experiment " + exp)
+								return cli.Exit(err.Humanize(), 1)
 							}
 
 							return nil
 						},
 					},
 					{
-						Name:      "stop",
-						Usage:     "stop an experiment",
-						ArgsUsage: "[flags] <exp>",
+						Name:        "stop",
+						Usage:       "Stop an experiment",
+						UsageText:   "phenix experiment stop [options] <experiment name>",
+						Description: "Used to stop a running experiment; dry-run will do everything but call out to minimega", // check to see if exp list shows stopped experimnet
+						ArgsUsage:   "[flags] <exp>",
 						Flags: []cli.Flag{
 							&cli.BoolFlag{
 								Name:  "dry-run",
-								Usage: "do everything but actually call out to minimega",
+								Usage: "Do everything but actually call out to minimega",
 							},
 						},
 						Action: func(ctx *cli.Context) error {
@@ -418,20 +449,23 @@ func main() {
 							)
 
 							if err := experiment.Stop(exp, dryrun); err != nil {
-								return cli.Exit(err, 1)
+								err := util.HumanizeError(err, "Unable to stop experiment " + exp)
+								return cli.Exit(err.Humanize(), 1)
 							}
 
 							return nil
 						},
 					},
 					{
-						Name:      "restart",
-						Usage:     "restart an experiment",
-						ArgsUsage: "[flags] <exp>",
+						Name:        "restart",
+						Usage:       "Restart an experiment",
+						UsageText:   "phenix experiment restart [options] <experiment name>",
+						Description: "Used to restart a running experiment; dry-run will do everything but call out to minimega", // check to see if exp list shows running experimnet
+						ArgsUsage:   "[flags] <exp>",
 						Flags: []cli.Flag{
 							&cli.BoolFlag{
 								Name:  "dry-run",
-								Usage: "do everything but actually call out to minimega",
+								Usage: "Do everything but actually call out to minimega",
 							},
 						},
 						Action: func(ctx *cli.Context) error {
@@ -441,11 +475,13 @@ func main() {
 							)
 
 							if err := experiment.Stop(exp, dryrun); err != nil {
-								return cli.Exit(err, 1)
+								err := util.HumanizeError(err, "Unable to stop the experiment " + exp)
+								return cli.Exit(err.Humanize(), 1)
 							}
 
 							if err := experiment.Start(exp, dryrun); err != nil {
-								return cli.Exit(err, 1)
+								err := util.HumanizeError(err, "Unable to start the experiment " + exp)
+								return cli.Exit(err.Humanize(), 1)
 							}
 
 							return nil
@@ -454,12 +490,16 @@ func main() {
 				},
 			},
 			{
-				Name:  "vm",
-				Usage: "phenix VM management",
+				Name:        "vm",
+				Usage:       "Virtual machine management",
+				UsageText:   "phenix vm [options] command", // not showing up as expected
+				Description: "Used to manage virtual machine(s)",
 				Subcommands: []*cli.Command{
 					{
-						Name:  "info",
-						Usage: "show VM info",
+						Name:        "info",
+						Usage:       "Table of virtual machine(s)",
+						UsageText:   "phenix vm info <experiment name> *OR* <experiment name>/<vm name>",
+						Description: "Used to display a table of virtual machine(s) for a specific experiment; virtual machine name is optional, when included will display only that vm",
 						Action: func(ctx *cli.Context) error {
 							// Should look like `exp` or `exp/vm`
 							parts := strings.Split(ctx.Args().First(), "/")
@@ -468,30 +508,34 @@ func main() {
 							case 1:
 								vms, err := vm.List(parts[0])
 								if err != nil {
-									return cli.Exit(err, 1)
+									err := util.HumanizeError(err, "Unable to get list of VMs")
+									return cli.Exit(err.Humanize(), 1)
 								}
 
 								util.PrintTableOfVMs(os.Stdout, vms...)
 							case 2:
 								vm, err := vm.Get(parts[0], parts[1])
 								if err != nil {
-									return cli.Exit(err, 1)
+									err := util.HumanizeError(err, "Unable to get information for the " + parts[1] + " VM")
+									return cli.Exit(err.Humanize(), 1)
 								}
 
 								util.PrintTableOfVMs(os.Stdout, *vm)
 							default:
-								return cli.Exit("invalid argument", 1)
+								return cli.Exit("Invalid argument", 1)
 							}
 
 							return nil
 						},
 					},
 					{
-						Name:  "pause",
-						Usage: "pause running VM",
+						Name:        "pause",
+						Usage:       "Pause a running virtual machine",
+						UsageText:   "phenix vm pause <experiment name> <vm name>",
+						Description: "Used to pause a running virtual machine for a speific experiment",
 						Action: func(ctx *cli.Context) error {
 							if ctx.Args().Len() != 2 {
-								return cli.Exit("must provide experiment and VM name", 1)
+								return cli.Exit("Must provide an experiment and virtual machine name", 1)
 							}
 
 							var (
@@ -500,18 +544,21 @@ func main() {
 							)
 
 							if err := vm.Pause(expName, vmName); err != nil {
-								return cli.Exit(err, 1)
+								err := util.HumanizeError(err, "Unable to pause the " + vmName + " VM")
+								return cli.Exit(err.Humanize(), 1)
 							}
 
 							return nil
 						},
 					},
 					{
-						Name:  "resume",
-						Usage: "resume paused VM",
+						Name:        "resume",
+						Usage:       "Resume a paused virtual machine",
+						UsageText:   "phenix vm resume <experiment name> <vm name>",
+						Description: "Used to resume a paused virtul machine for a specific experiment",
 						Action: func(ctx *cli.Context) error {
 							if ctx.Args().Len() != 2 {
-								return cli.Exit("must provide experiment and VM name", 1)
+								return cli.Exit("Must provide an experiment and virtual machine name", 1)
 							}
 
 							var (
@@ -520,26 +567,29 @@ func main() {
 							)
 
 							if err := vm.Resume(expName, vmName); err != nil {
-								return cli.Exit(err, 1)
+								err := util.HumanizeError(err, "Unable to resume the " + vmName + " VM")
+								return cli.Exit(err.Humanize(), 1)
 							}
 
 							return nil
 						},
 					},
 					{
-						Name:      "redeploy",
-						Usage:     "redeploy running VM",
-						ArgsUsage: "<exp> <vm>",
+						Name:        "redeploy",
+						Usage:       "Redeploy a running virtual machine",
+						UsageText:   "phenix vm redeploy [options] <experiment name> <vm name>",
+						Description: "Used to redeploy a running virtual machine for a specific experiment; several values can be modified",
+						ArgsUsage:   "<exp> <vm>",
 						Flags: []cli.Flag{
 							&cli.IntFlag{
 								Name:    "cpu",
 								Aliases: []string{"c"},
-								Usage:   "number of VM CPUs (1-8 is valid)",
+								Usage:   "Number of VM CPUs (1-8 is valid)",
 							},
 							&cli.IntFlag{
 								Name:    "mem",
 								Aliases: []string{"m"},
-								Usage:   "amount of memory in MB (512, 1024, 2048, 3072, 4096, 8192, 12288, 16384 are valid)",
+								Usage:   "Amount of memory in megabytes (512, 1024, 2048, 3072, 4096, 8192, 12288, 16384 are valid)",
 							},
 							&cli.StringFlag{
 								Name:    "disk",
@@ -549,17 +599,17 @@ func main() {
 							&cli.BoolFlag{
 								Name:    "replicate-injects",
 								Aliases: []string{"r"},
-								Usage:   "recreate disk snapshot and VM injections",
+								Usage:   "Recreate disk snapshot and VM injections",
 							},
 							&cli.IntFlag{
 								Name:    "partition",
 								Aliases: []string{"p"},
-								Usage:   "partition of disk to inject files into (only used if disk option is specified)",
+								Usage:   "Partition of disk to inject files into (only used if disk option is specified)",
 							},
 						},
 						Action: func(ctx *cli.Context) error {
 							if ctx.Args().Len() != 2 {
-								return cli.Exit("must provide all arguments", 1)
+								return cli.Exit("Must provide all arguments", 1)
 							}
 
 							var (
@@ -573,11 +623,11 @@ func main() {
 							)
 
 							if cpu != 0 && (cpu < 1 || cpu > 8) {
-								return cli.Exit("CPUs must be 1-8 only", 1)
+								return cli.Exit("CPUs can only be 1-8", 1)
 							}
 
 							if mem != 0 && (mem < 512 || mem > 16384 || mem%512 != 0) {
-								return cli.Exit("memory must be one of 512, 1024, 2048, 3072, 4096, 8192, 12288, 16384", 1)
+								return cli.Exit("Memory must be one of 512, 1024, 2048, 3072, 4096, 8192, 12288, 16384", 1)
 							}
 
 							opts := []vm.RedeployOption{
@@ -589,19 +639,22 @@ func main() {
 							}
 
 							if err := vm.Redeploy(expName, vmName, opts...); err != nil {
-								return cli.Exit(err, 1)
+								err := util.HumanizeError(err, "Unable to redeploy the " + vmName + " VM")
+								return cli.Exit(err.Humanize(), 1)
 							}
 
 							return nil
 						},
 					},
 					{
-						Name:      "kill",
-						Usage:     "kill (delete) running or paused VM",
-						ArgsUsage: "<exp> <vm>",
+						Name:        "kill",
+						Usage:       "Kill a running or paused virtual machine",
+						UsageText:   "phenix vm kill <experiment name> <vm name>",
+						Description: "Used to kill or delete a running or paused virtual machine for a specific experiment",
+						ArgsUsage:   "<exp> <vm>",
 						Action: func(ctx *cli.Context) error {
 							if ctx.Args().Len() != 2 {
-								return cli.Exit("must provide all arguments", 1)
+								return cli.Exit("Must provide all arguments", 1)
 							}
 
 							var (
@@ -610,30 +663,36 @@ func main() {
 							)
 
 							if err := vm.Kill(expName, vmName); err != nil {
-								return cli.Exit(err, 1)
+								err := util.HumanizeError(err, "Unable to kill the " + vmName + " VM")
+								return cli.Exit(err.Humanize(), 1)
 							}
 
 							return nil
 						},
 					},
 					{
-						Name:  "set",
-						Usage: "set config value for VM in stopped experiment",
+						Name:        "set",
+						Usage:       "Set configuration value for a virtual machine",
+						UsageText:   "phenix vm set {{ TO DO }}",
+						Description: "Used to set a configuration value for a virtual machine in a stopped experiment",
 						Action: func(ctx *cli.Context) error {
 							return cli.Exit("This command is not yet implemented. For now, you can edit the experiment directly.", 1)
 						},
 					},
 					{
-						Name:  "net",
-						Usage: "modify network connectivity for running VM",
+						Name:        "net",
+						Usage:       "Modify network connectivity for a virtual machine",
+						UsageText:   "phenix vm net command", // not showing up as expected
+						Description: "Used to modify the network connectivity for a virtual machine in a running experiment; see command help for connect or disconnect for additional arguments",
 						Subcommands: []*cli.Command{
 							{
 								Name:      "connect",
-								Usage:     "connect a VM interface to a VLAN",
+								Usage:     "Connect a VM interface to a VLAN",
+								UsageText: "phenix vm net connect <experiment name> <vm name> <iface index> <vlan name>", // vlan name or identifier?
 								ArgsUsage: "<exp> <vm> <iface index> <vlan>",
 								Action: func(ctx *cli.Context) error {
 									if ctx.Args().Len() != 4 {
-										return cli.Exit("must provide all arguments", 1)
+										return cli.Exit("Must provide all arguments", 1)
 									}
 
 									var (
@@ -644,11 +703,12 @@ func main() {
 
 									iface, err := strconv.Atoi(ctx.Args().Get(2))
 									if err != nil {
-										return cli.Exit("interface index must be an integer", 1)
+										return cli.Exit("The network interface index must be an integer", 1)
 									}
 
 									if err := vm.Connect(expName, vmName, iface, vlan); err != nil {
-										return cli.Exit(err, 1)
+										err := util.HumanizeError(err, "Unable to modify the connectivity for the " + vmName + " VM")
+										return cli.Exit(err.Humanize(), 1)
 									}
 
 									return nil
@@ -656,11 +716,12 @@ func main() {
 							},
 							{
 								Name:      "disconnect",
-								Usage:     "disconnect a VM interface",
+								Usage:     "Disconnect a vm interface",
+								UsageText: "phenix vm net disconnect <experiment name> <vm name> <iface index>",
 								ArgsUsage: "<exp> <vm> <iface index>",
 								Action: func(ctx *cli.Context) error {
 									if ctx.Args().Len() != 3 {
-										return cli.Exit("must provide all arguments", 1)
+										return cli.Exit("Must provide all arguments", 1)
 									}
 
 									var (
@@ -670,11 +731,12 @@ func main() {
 
 									iface, err := strconv.Atoi(ctx.Args().Get(2))
 									if err != nil {
-										return cli.Exit("interface index must be an integer", 1)
+										return cli.Exit("The network interface index must be an integer", 1)
 									}
 
 									if err := vm.Disonnect(expName, vmName, iface); err != nil {
-										return cli.Exit(err, 1)
+										err := util.HumanizeError(err, "Unable to disconnect the interface on the " + vmName + " VM")
+										return cli.Exit(err.Humanize(), 1)
 									}
 
 									return nil
@@ -683,16 +745,19 @@ func main() {
 						},
 					},
 					{
-						Name:  "capture",
-						Usage: "modify network packet captures for running VM",
+						Name:        "capture",
+						Usage:       "Modify network packet captures for a virutal machine",
+						UsageText:   "phenix vm capture command", // not showing up as expected
+						Description: "Used to modify the network packet captures for a virtual machine in a running experiment; see command help for start and stop for additional arguments",
 						Subcommands: []*cli.Command{
 							{
 								Name:      "start",
-								Usage:     "start a packet capture on a VM interface",
+								Usage:     "Start a packet capture",
+								UsageText: "phenix vm capture start <experiment name> <vm name> <iface index> </path/to/out file>",
 								ArgsUsage: "<exp> <vm> <iface index> <out file>",
 								Action: func(ctx *cli.Context) error {
 									if ctx.Args().Len() != 4 {
-										return cli.Exit("must provide all arguments", 1)
+										return cli.Exit("Must provide all arguments", 1)
 									}
 
 									var (
@@ -703,11 +768,12 @@ func main() {
 
 									iface, err := strconv.Atoi(ctx.Args().Get(2))
 									if err != nil {
-										return cli.Exit("interface index must be an integer", 1)
+										return cli.Exit("The network interface index must be an integer", 1)
 									}
 
 									if err := vm.StartCapture(expName, vmName, iface, out); err != nil {
-										return cli.Exit(err, 1)
+										err := util.HumanizeError(err, "Unable to start a capture on the interface on the " + vmName + " VM")
+										return cli.Exit(err.Humanize(), 1)
 									}
 
 									return nil
@@ -715,11 +781,12 @@ func main() {
 							},
 							{
 								Name:      "stop",
-								Usage:     "stop packet captures for a VM",
+								Usage:     "Stop packet capture(s)",
+								UsageText: "phenix vm capture stop <experiment name> <vm name>",
 								ArgsUsage: "<exp> <vm>",
 								Action: func(ctx *cli.Context) error {
 									if ctx.Args().Len() != 2 {
-										return cli.Exit("must provide all arguments", 1)
+										return cli.Exit("Must provide all arguments", 1)
 									}
 
 									var (
@@ -728,7 +795,8 @@ func main() {
 									)
 
 									if err := vm.StopCaptures(expName, vmName); err != nil {
-										return cli.Exit(err, 1)
+										err := util.HumanizeError(err, "Unable to stop the packet captures on the " + vmName + " VM")
+										return cli.Exit(err.Humanize(), 1)
 									}
 
 									return nil
@@ -739,68 +807,72 @@ func main() {
 				},
 			},
 			{
-				Name:  "image",
-				Usage: "phenix Image management",
+				Name:        "image",
+				Usage:       "Virtual disk image management",
+				UsageText:   "phenix image command", // not showing up as expected
+				Description: "Used to manage virtual disk image(s)",
 				Subcommands: []*cli.Command{
 					{
-						Name:      "create",
-						Usage:     "create configuration from which to build an image",
-						ArgsUsage: "[flags] <name>",
+						Name:        "create",
+						Usage:       "Create image configuration",
+						UsageText:   "phenix image create [options] <image name>",
+						Description: "Used to create a virtual disk image configuration from which to build an image",
+						ArgsUsage:   "[flags] <name>",
 						Flags: []cli.Flag{
 							&cli.StringFlag{
 								Name:    "size",
 								Aliases: []string{"z"},
-								Usage:   "image size to use",
+								Usage:   "Image size to use",
 								Value:   "5G",
 							},
 							&cli.StringFlag{
 								Name:    "variant",
 								Aliases: []string{"v"},
-								Usage:   "image variant to use",
+								Usage:   "Image variant to use",
 								Value:   "minbase",
 							},
 							&cli.StringFlag{
 								Name:    "release",
 								Aliases: []string{"r"},
-								Usage:   "os release codename",
+								Usage:   "OS release codename",
 								Value:   "bionic",
 							},
 							&cli.StringFlag{
 								Name:    "mirror",
 								Aliases: []string{"m"},
-								Usage:   "debootstrap mirror (must match release)",
+								Usage:   "Debootstrap mirror (must match release)",
 								Value:   "http://us.archive.ubuntu.com/ubuntu/",
 							},
 							&cli.StringFlag{
 								Name:    "format",
 								Aliases: []string{"f"},
-								Usage:   "format of disk image",
+								Usage:   "Format of disk image",
 								Value:   "raw",
 							},
 							&cli.BoolFlag{
 								Name:    "compress",
 								Aliases: []string{"c"},
-								Usage:   "compress image after creation",
+								Usage:   "Compress image after creation (does not apply to raw image)",
 							},
 							&cli.StringFlag{
 								Name:    "overlays",
 								Aliases: []string{"o"},
-								Usage:   "list of overlay names (separated by comma)",
+								Usage:   "List of overlay names (separated by comma)",
 							},
 							&cli.StringFlag{
 								Name:    "packages",
 								Aliases: []string{"p"},
-								Usage:   "list of packages to include in addition to those provided by variant (separated by comma)",
+								Usage:   "List of packages to include in addition to those provided by variant (separated by comma)",
 							},
 							&cli.StringFlag{
 								Name:    "scripts",
 								Aliases: []string{"s"},
-								Usage:   "list of scripts to include in addition to the default one (separated by comma)",
+								Usage:   "List of scripts to include in addition to the default one (separated by comma)",
 							},
 							&cli.StringFlag{
 								Name:    "debootstrap-append",
 								Aliases: []string{"d"},
-								Usage:   "additional arguments to debootstrap (default: --components=main,restricted,universe,multiverse)",
+								Usage:   "Additional arguments to debootstrap (default: --components=main,restricted,universe,multiverse)",
 							},
 						},
 						Action: func(ctx *cli.Context) error {
@@ -828,7 +900,8 @@ func main() {
 							}
 
 							if err := image.Create(name, &img); err != nil {
-								return cli.Exit(err, 1)
+								err := util.HumanizeError(err, "Unable to create the " + name + " image" )
+								return cli.Exit(err.Humanize(), 1)
 							}
 
 							return nil
@@ -836,32 +909,34 @@ func main() {
 					},
 					{
 						Name:      "create-from",
-						Usage:     "create a new configuration from an existing one",
+						Usage:     "Create image configuration from existing one",
+						UsageText: "phenix image create-from [options] <existing name> <new name>",
+						Description: "Used to create a new virtual disk image configuration from an existing one; if options are used they will be added to the exisiting configuration",
 						ArgsUsage: "[flags] <name> <saveas>",
 						Flags: []cli.Flag{
 							&cli.StringFlag{
 								Name:    "overlays",
 								Aliases: []string{"o"},
-								Usage:   "list of overlay names (separated by comma)",
+								Usage:   "List of overlay names (separated by comma)",
 							},
 							&cli.StringFlag{
 								Name:    "packages",
 								Aliases: []string{"p"},
-								Usage:   "list of packages to include in addition to those provided by variant (separated by comma)",
+								Usage:   "List of packages to include in addition to those provided by variant (separated by comma)",
 							},
 							&cli.StringFlag{
 								Name:    "scripts",
 								Aliases: []string{"s"},
-								Usage:   "list of scripts to include in addition to the default one (separated by comma)",
+								Usage:   "List of scripts to include in addition to the default one (separated by comma)",
 							},
 						},
 						Action: func(ctx *cli.Context) error {
 							if ctx.Args().First() == "" {
-								return cli.Exit("name of existing config is required", 1)
+								return cli.Exit("Name of existing configuration is required", 1)
 							}
 
 							if ctx.Args().Get(1) == "" {
-								return cli.Exit("name for new config is required", 1)
+								return cli.Exit("Name for new configuration is required", 1)
 							}
 
 							var (
@@ -873,31 +948,34 @@ func main() {
 							)
 
 							if err := image.CreateFromConfig(name, saveas, overlays, packages, scripts); err != nil {
-								return cli.Exit(err, 1)
+								err := util.HumanizeError(err, "Unable to create the configuration file " + saveas)
+								return cli.Exit(err.Humanize(), 1)
 							}
 
 							return nil
 						},
 					},
 					{
-						Name:      "build",
-						Usage:     "build an image from a configuration",
-						ArgsUsage: "[flags] <name>",
+						Name:        "build",
+						Usage:       "Build an image",
+						UsageText:   "phenix image build [options] <configuration name>",
+						Description: "Used to build a new virtual disk using an exisitng configuration",
+						ArgsUsage:   "[flags] <name>",
 						Flags: []cli.Flag{
 							&cli.StringFlag{
 								Name:    "verbosity",
 								Aliases: []string{"v"},
-								Usage:   "enable verbose output from debootstrap (options are v, vv, vvv)",
+								Usage:   "Enable verbose output from debootstrap (options are v, vv, vvv)",
 							},
 							&cli.BoolFlag{
 								Name:    "cache",
 								Aliases: []string{"c"},
-								Usage:   "cache rootfs as tar archive",
+								Usage:   "Cache rootfs as tar archive",
 							},
 						},
 						Action: func(ctx *cli.Context) error {
 							if ctx.Args().First() == "" {
-								return cli.Exit("name of config to build is required", 1)
+								return cli.Exit("Name of configuration to build the disk image is required", 1)
 							}
 
 							var (
@@ -907,20 +985,23 @@ func main() {
 							)
 
 							if err := image.Build(name, verbosity, cache); err != nil {
-								return cli.Exit(err, 1)
+								err := util.HumanizeError(err, "Unable to build the " + name + " image")
+								return cli.Exit(err.Humanize(), 1)
 							}
 
 							return nil
 						},
 					},
 					{
-						Name:      "list",
-						Usage:     "prints a list of image build configuration",
-						ArgsUsage: "",
+						Name:        "list",
+						Usage:       "Table of image configuration(s)",
+						UsageText:   "phenix image list",
+						Description: "Used to display a table of exisitng virtual disk image configuration(s); includes size, vairant, release, overlays, and packages",
 						Action: func(ctx *cli.Context) error {
 							imgs, err := image.List()
 							if err != nil {
-								return cli.Exit(err, 1)
+								err := util.HumanizeError(err, "Unable to print a list of configurations")
+								return cli.Exit(err.Humanize(), 1)
 							}
 
 							util.PrintTableOfImageConfigs(os.Stdout, imgs...)
@@ -929,49 +1010,54 @@ func main() {
 						},
 					},
 					{
-						Name:      "delete",
-						Usage:     "delete image build configuration by name",
-						ArgsUsage: "<name>",
+						Name:        "delete",
+						Usage:       "Delete image configuration",
+						UsageText:   "phenix image delete <image name>",
+						Description: "Used to delete an existing virtual disk image configuration by name",
+						ArgsUsage:   "<name>",
 						Action: func(ctx *cli.Context) error {
 							name := ctx.Args().First()
 
 							if name == "" {
-								return cli.Exit("name of config to delete is required", 1)
+								return cli.Exit("Name of config to delete is required", 1)
 							}
 
 							if err := config.Delete("image/" + name); err != nil {
-								return cli.Exit(err, 1)
+								err := util.HumanizeError(err, "Unable to delete the " + name + " image")
+								return cli.Exit(err.Humanize(), 1)
 							}
 
-							fmt.Printf("image config %s deleted\n", name)
+							fmt.Printf("Image config %s was deleted\n", name)
 
 							return nil
 						},
 					},
 					{
-						Name:      "append",
-						Usage:     "append scripts, packages, and/or overlays to image build config",
-						ArgsUsage: "[flags] <name>",
+						Name:        "append",
+						Usage:       "Append to an image configuration",
+						UsageText:   "phenix image append [options] <image name>",
+						Description: "Used to add scripts, packages, and/or overlays to an existing virtual disk image configuration",
+						ArgsUsage:   "[flags] <name>",
 						Flags: []cli.Flag{
 							&cli.StringFlag{
 								Name:    "overlays",
 								Aliases: []string{"o"},
-								Usage:   "list of overlay names (separated by comma)",
+								Usage:   "List of overlay names (separated by comma)",
 							},
 							&cli.StringFlag{
 								Name:    "packages",
 								Aliases: []string{"p"},
-								Usage:   "list of packages to include in addition to those provided by variant (separated by comma)",
+								Usage:   "List of packages to include in addition to those provided by variant (separated by comma)",
 							},
 							&cli.StringFlag{
 								Name:    "scripts",
 								Aliases: []string{"s"},
-								Usage:   "list of scripts to include in addition to the default one (separated by comma)",
+								Usage:   "List of scripts to include in addition to the default one (separated by comma)",
 							},
 						},
 						Action: func(ctx *cli.Context) error {
 							if ctx.Args().First() == "" {
-								return cli.Exit("name of config file to append to is required", 1)
+								return cli.Exit("Name of configuration to append to is required", 1)
 							}
 
 							var (
@@ -982,36 +1068,39 @@ func main() {
 							)
 
 							if err := image.Append(name, overlays, packages, scripts); err != nil {
-								return cli.Exit(err, 1)
+								err := util.HumanizeError(err, "Unable to append to the " + name + " image")
+								return cli.Exit(err.Humanize(), 1)
 							}
 
 							return nil
 						},
 					},
 					{
-						Name:      "remove",
-						Usage:     "remove scripts, packages, and/or overlays from an image build config",
-						ArgsUsage: "[flags] <name>",
+						Name:        "remove",
+						Usage:       "Remove from an image configuration",
+						UsageText:   "phenix image remove [options] <image name>",
+						Description: "Used to remove scripts, packages, and/or overlays to an existing virtual disk image configuration",
+						ArgsUsage:   "[flags] <name>>",
 						Flags: []cli.Flag{
 							&cli.StringFlag{
 								Name:    "overlays",
 								Aliases: []string{"o"},
-								Usage:   "list of overlay names (separated by comma)",
+								Usage:   "List of overlay names (separated by comma)",
 							},
 							&cli.StringFlag{
 								Name:    "packages",
 								Aliases: []string{"p"},
-								Usage:   "list of packages to include in addition to those provided by variant (separated by comma)",
+								Usage:   "List of packages to include in addition to those provided by variant (separated by comma)",
 							},
 							&cli.StringFlag{
 								Name:    "scripts",
 								Aliases: []string{"s"},
-								Usage:   "list of scripts to include in addition to the default one (separated by comma)",
+								Usage:   "List of scripts to include in addition to the default one (separated by comma)",
 							},
 						},
 						Action: func(ctx *cli.Context) error {
 							if ctx.Args().First() == "" {
-								return cli.Exit("name of config file to remove from is required", 1)
+								return cli.Exit("Name of configuration to remove from is required", 1)
 							}
 
 							var (
@@ -1022,7 +1111,8 @@ func main() {
 							)
 
 							if err := image.Remove(name, overlays, packages, scripts); err != nil {
-								return cli.Exit(err, 1)
+								err := util.HumanizeError(err, "Unable to remove from the " + name + " image")
+								return cli.Exit(err.Humanize(), 1)
 							}
 
 							return nil
@@ -1031,18 +1121,22 @@ func main() {
 				},
 			},
 			{
-				Name:  "vlan",
-				Usage: "phenix VLAN management",
+				Name:        "vlan",
+				Usage:       "VLAN management",
+				UsageText:   "phenix vlan command", // not showing up as expected
+				Description: "Used to manage VLAN(s)",
 				Subcommands: []*cli.Command{
 					{
-						Name:      "alias",
-						Usage:     "view or set VLAN alias",
-						ArgsUsage: "[flags] [experiment] [alias] [vlan]",
+						Name:        "alias",
+						Usage:       "View or set a VLAN alias",
+						UsageText:   "phenix vlan alias <experiment name> <alias name> <vlan name>", // is it vlan name or index or ??
+						Description: "Used to view or set an alias for a given VLAN",
+						ArgsUsage:   "[flags] [experiment] [alias] [vlan]",
 						Flags: []cli.Flag{
 							&cli.BoolFlag{
 								Name:    "force",
 								Aliases: []string{"f"},
-								Usage:   "force update on set action if alias already exists",
+								Usage:   "Force update on set action if alias already exists",
 							},
 						},
 						Action: func(ctx *cli.Context) error {
@@ -1050,14 +1144,16 @@ func main() {
 							case 0:
 								info, err := vlan.Aliases()
 								if err != nil {
-									return cli.Exit(err, 1)
+									err := util.HumanizeError(err, "Unable to display all aliases") // not sure this is accurate
+									return cli.Exit(err.Humanize(), 1)
 								}
 
 								util.PrintTableOfVLANAliases(os.Stdout, info)
 							case 1:
 								info, err := vlan.Aliases(vlan.Experiment(ctx.Args().First()))
 								if err != nil {
-									return cli.Exit(err, 1)
+									err := util.HumanizeError(err, "Unable to display aliases for the experiment") // not sure this is accurate; if it is, should represent exp name
+									return cli.Exit(err.Humanize(), 1)
 								}
 
 								util.PrintTableOfVLANAliases(os.Stdout, info)
@@ -1071,28 +1167,31 @@ func main() {
 
 								vid, err := strconv.Atoi(id)
 								if err != nil {
-									return cli.Exit("VLAN ID provided not a valid integer", 1)
+									return cli.Exit("The VLAN identifier provided is not a valid integer", 1)
 								}
 
 								if err := vlan.SetAlias(vlan.Experiment(exp), vlan.Alias(alias), vlan.ID(vid), vlan.Force(force)); err != nil {
-									return cli.Exit(err, 1)
+									err := util.HumanizeError(err, "Unable to set the alias for the " + exp + " experiment")
+									return cli.Exit(err.Humanize(), 1)
 								}
 							default:
-								return cli.Exit("unexpected number of arguments provided", 1)
+								return cli.Exit("Unexpected number of arguments provided", 1)
 							}
 
 							return nil
 						},
 					},
 					{
-						Name:      "range",
-						Usage:     "view or set VLAN range",
-						ArgsUsage: "[flags] [experiment] [min] [max]",
+						Name:        "range",
+						Usage:       "View or set a vlan range",
+						UsageText:   "phenix vlan range <experiment name> <range minimum> <range maximum>",
+						Description: "Used to view or set a range for a given VLAN",
+						ArgsUsage:   "[flags] [experiment] [min] [max]",
 						Flags: []cli.Flag{
 							&cli.BoolFlag{
 								Name:    "force",
 								Aliases: []string{"f"},
-								Usage:   "force update on set action if range is already set",
+								Usage:   "Force update on set action if range is already set",
 							},
 						},
 						Action: func(ctx *cli.Context) error {
@@ -1100,14 +1199,16 @@ func main() {
 							case 0:
 								info, err := vlan.Ranges()
 								if err != nil {
-									return cli.Exit(err, 1)
+									err := util.HumanizeError(err, "Unable to display VLAN range(s)") // not sure this is accurate
+									return cli.Exit(err.Humanize(), 1)
 								}
 
 								util.PrintTableOfVLANRanges(os.Stdout, info)
 							case 1:
 								info, err := vlan.Ranges(vlan.Experiment(ctx.Args().First()))
 								if err != nil {
-									return cli.Exit(err, 1)
+									err := util.HumanizeError(err, "Unable to display VLAN range(s) for the experiment") // not sure this is accurate; if it is, should represent exp name
+									return cli.Exit(err.Humanize(), 1)
 								}
 
 								util.PrintTableOfVLANRanges(os.Stdout, info)
@@ -1121,19 +1222,20 @@ func main() {
 
 								vmin, err := strconv.Atoi(min)
 								if err != nil {
-									return cli.Exit("VLAN min ID provided not a valid integer", 1)
+									return cli.Exit("The VLAN range minimum identifier provided not a valid integer", 1)
 								}
 
 								vmax, err := strconv.Atoi(max)
 								if err != nil {
-									return cli.Exit("VLAN max ID provided not a valid integer", 1)
+									return cli.Exit("The VLAN range maximum identifier provided not a valid integer", 1)
 								}
 
 								if err := vlan.SetRange(vlan.Experiment(exp), vlan.Min(vmin), vlan.Max(vmax), vlan.Force(force)); err != nil {
-									return cli.Exit(err, 1)
+									err := util.HumanizeError(err, "Unable to set the VLAN range for the " + exp + " experiment")
+									return cli.Exit(err.Humanize(), 1)
 								}
 							default:
-								return cli.Exit("unexpected number of arguments provided", 1)
+								return cli.Exit("Unexpected number of arguments provided", 1)
 							}
 
 							return nil
@@ -1165,7 +1267,7 @@ func main() {
 
 							exp, err := experiment.Get(name)
 							if err != nil {
-								err := util.HumanizeError(err, "Unable to get provided experiment " + name)
+								err := util.HumanizeError(err, "Unable to get the " + name + " experiment")
 								return cli.Exit(err.Humanize(), 1)
 							}
 
