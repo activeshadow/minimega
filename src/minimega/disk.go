@@ -147,7 +147,7 @@ func diskCreate(format, dst, size string) error {
 // diskInject injects files into a disk image. dst/partition specify the image
 // and the partition number, pairs is the dst, src filepaths. options can be
 // used to supply mount arguments.
-func diskInject(dst, partition string, pairs map[string]string, options []string) error {
+func diskInject(dst, partition string, pairs map[string]string, permissions map[string]string, options []string) error {
 	// Load nbd
 	if err := nbd.Modprobe(); err != nil {
 		return err
@@ -266,6 +266,25 @@ func diskInject(dst, partition string, pairs map[string]string, options []string
 		if err != nil {
 			return fmt.Errorf("%v: %v", out, err)
 		}
+		//Set Permissions on a file
+		if len(permissions) > 0 {
+			fmt.Printf("%v",permissions)
+			fmt.Printf("%v",permissions[dst])
+			permission := strings.Split(permissions[dst]," ")
+			rFlag := "-v"
+			owner := fmt.Sprintf("%s:%s",permission[0],permission[1])
+			if strings.ToLower(permission[3]) == "true" {
+				rFlag += "R"
+			}
+			out, err := processWrapper("chown", rFlag ,owner ,filepath.Join(mntDir, dst))
+			if err != nil {
+				return fmt.Errorf("%v: %v", out, err)
+			}
+			out, err = processWrapper("chmod",rFlag , permission[2], filepath.Join(mntDir, dst))
+			if err != nil {
+				return fmt.Errorf("%v: %v", out, err)
+			}
+		}
 	}
 
 	// explicitly flush buffers
@@ -282,25 +301,30 @@ func diskInject(dst, partition string, pairs map[string]string, options []string
 // way so that one source file can be written to multiple destinations and so
 // that we can detect and return an error if the user tries to inject two files
 // with the same destination.
-func parseInjectPairs(files []string) (map[string]string, error) {
+func parseInjectPairs(files []string) (map[string]string,map[string]string,error) {
 	pairs := map[string]string{}
-
+	permissions := map[string]string{}
 	// parse inject pairs
 	for _, arg := range files {
 		parts := strings.Split(arg, ":")
-		if len(parts) != 2 {
-			return nil, errors.New("malformed command; expected src:dst pairs")
+		if ( len(parts) > 2 && len(parts) != 6 ) {
+			return nil,nil, errors.New("malformed command; expected src:dst:user:group:permission:recursive")
+		} else if ( len(parts) < 6 && len(parts) != 2 ) {
+			return nil,nil, errors.New("malformed command; expected src:dst pairs")
 		}
 
 		if pairs[parts[1]] != "" {
-			return nil, fmt.Errorf("destination appears twice: `%v`", parts[1])
+			return nil,nil, fmt.Errorf("destination appears twice: `%v`", parts[1])
 		}
 
 		pairs[parts[1]] = parts[0]
 		log.Debug("inject pair: %v, %v", parts[0], parts[1])
+		if len(parts) == 6 {
+			permissions[parts[1]] = strings.Join(parts[2:], " ")
+			log.Debug("permissions set: %v owner: %v:%v mode: %v recursive: %v",parts[1],parts[2],parts[3],parts[4],parts[5])
+		}
 	}
-
-	return pairs, nil
+	return pairs,permissions,nil
 }
 
 func cliDisk(ns *Namespace, c *minicli.Command, resp *minicli.Response) error {
@@ -347,12 +371,12 @@ func cliDisk(ns *Namespace, c *minicli.Command, resp *minicli.Response) error {
 		options := fieldsQuoteEscape("\"", c.StringArgs["options"])
 		log.Debug("got options: %v", options)
 
-		pairs, err := parseInjectPairs(c.ListArgs["files"])
+		pairs,permissions,err := parseInjectPairs(c.ListArgs["files"])
 		if err != nil {
 			return err
 		}
 
-		return diskInject(image, partition, pairs, options)
+		return diskInject(image, partition, pairs, permissions, options)
 	} else if c.BoolArgs["create"] {
 		size := c.StringArgs["size"]
 
