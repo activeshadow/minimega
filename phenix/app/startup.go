@@ -3,7 +3,7 @@ package app
 import (
 	"fmt"
 	"os"
-
+	"path/filepath"
 	"phenix/tmpl"
 	"phenix/types"
 	v1 "phenix/types/version/v1"
@@ -103,16 +103,20 @@ func (this Startup) PreStart(exp *types.Experiment) error {
 	// note in the mako file that there does not appear to be timezone or hostname for rhel and centos
 	startupDir := exp.Spec.BaseDir + "/startup"
 
-	// currently assuming /phenix/images for image directory
-	imageDir := "/phenix/images/"
-
 	if err := os.MkdirAll(startupDir, 0755); err != nil {
 		return fmt.Errorf("creating experiment startup directory path: %w", err)
 	}
-
 	for _, node := range exp.Spec.Topology.Nodes {
+		imageDir := filepath.Dir(node.Hardware.Drives[0].Image)
+		if  imageDir == "." {
+			// currently assuming /phenix/images for image directory
+			imageDir = "/phenix/images/" + node.Hardware.Drives[0].Image
+		} else {
+			// use abs path if defined
+			imageDir = node.Hardware.Drives[0].Image
+		}
 		// check if the disk image is present, if not set do not boot to true
-		if _, err := os.Stat(imageDir + node.Hardware.Drives[0].Image); os.IsNotExist(err) {
+		if _, err := os.Stat(imageDir); os.IsNotExist(err) {
 			dnb := true
 			node.General.DoNotBoot = &dnb
 		}
