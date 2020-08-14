@@ -407,33 +407,22 @@ components:
                 type: string
                 title: Description of File Being Injected
                 example: PowerWorld case binary data
-        permissions:	    
-	  type: array
-	  title: File Permissions
-	  required:
-	    -path
-            -permissions
-            properties:
-	      path:
+              owner:
                 type: string
-		title: Path of injected file of directory
-		example: /var/www/html
-	      owner:
-	        type: string
-		title: User whome owns injected file
-		example: www
-	      group:
-	        type: string
-		title: Group whom owns injected file
-		example: www
-	      permissions: 
-	        type: string
-		title: Injected file permissions (UNIX style)
-		example: 0664
-	      recursive: 
-	        type: bool
-		title: If path is a directiory and flag true set permissions recursively
-		example: True
+                title: User whome owns injected file
+                example: www
+              group:
+                type: string
+                title: Group whom owns injected file
+                example: www
+              permissions: 
+                type: string
+                title: Injected file permissions (UNIX style)
+                example: 0664
+              recursive: 
+                type: boolean
+                title: If path is a directiory and flag true set permissions recursively
+                example: True
         metadata:
           type: object
           title: Node Metadata (typically used for app configuration)
