@@ -247,7 +247,7 @@ func Build(name, verbosity string, cache bool) error {
 	dir := "/phenix/images"
 	filename := dir + "/" + name + ".vmdb"
 
-	if err := tmpl.CreateFileFromTemplate("vmdb.tmpl", img, filename,0644); err != nil {
+	if err := tmpl.CreateFileFromTemplate("vmdb.tmpl", img, filename); err != nil {
 		return fmt.Errorf("generate vmdb config from template: %w", err)
 	}
 

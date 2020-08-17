@@ -76,7 +76,7 @@ func (Vyatta) PreStart(exp *types.Experiment) error {
 
 		vyattaFile := vyattaDir + "/" + node.General.Hostname + ".boot"
 
-		if err := tmpl.CreateFileFromTemplate("vyatta.tmpl", data, vyattaFile,0644); err != nil {
+		if err := tmpl.CreateFileFromTemplate("vyatta.tmpl", data, vyattaFile); err != nil {
 			return fmt.Errorf("generating vyatta config: %w", err)
 		}
 	}

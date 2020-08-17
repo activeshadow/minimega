@@ -37,7 +37,7 @@ func GenerateFromTemplate(name string, data interface{}, w io.Writer) error {
 // given data. The result is written to the given file. Internally it calls
 // `GenerateFromTemplate`. It returns any errors encountered while executing the
 // template.
-func CreateFileFromTemplate(name string, data interface{}, filename string, permissions os.FileMode) error {
+func CreateFileFromTemplate(name string, data interface{}, filename string) error {
 	dir := filepath.Dir(filename)
 
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -48,7 +48,6 @@ func CreateFileFromTemplate(name string, data interface{}, filename string, perm
 	if err != nil {
 		return fmt.Errorf("creating template file: %w", err)
 	}
-	f.Chmod(permissions)
 	defer f.Close()
 
 	return GenerateFromTemplate(name, data, f)

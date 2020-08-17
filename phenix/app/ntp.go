@@ -54,6 +54,7 @@ func (this *NTP) Configure(exp *types.Experiment) error {
 			a := &v1.Injection{
 				Src:         ntpFile,
 				Dst:         "ntp.ps1",
+				Permissions:	"0755",
 				Description: "",
 			}
 
@@ -84,15 +85,15 @@ func (this NTP) PreStart(exp *types.Experiment) error {
 		ntpFile := ntpDir + "/" + node.General.Hostname + "_ntp"
 
 		if node.Type == "Router" {
-			if err := tmpl.CreateFileFromTemplate("ntp_linux.tmpl", ntpAddr, ntpFile,0644); err != nil {
+			if err := tmpl.CreateFileFromTemplate("ntp_linux.tmpl", ntpAddr, ntpFile); err != nil {
 				return fmt.Errorf("generating ntp script: %w", err)
 			}
 		} else if node.Hardware.OSType == v1.OSType_Linux {
-			if err := tmpl.CreateFileFromTemplate("ntp_linux.tmpl", ntpAddr, ntpFile,0644); err != nil {
+			if err := tmpl.CreateFileFromTemplate("ntp_linux.tmpl", ntpAddr, ntpFile); err != nil {
 				return fmt.Errorf("generating ntp script: %w", err)
 			}
 		} else if node.Hardware.OSType == v1.OSType_Windows {
-			if err := tmpl.CreateFileFromTemplate("ntp_windows.tmpl", ntpAddr, ntpFile,0755); err != nil {
+			if err := tmpl.CreateFileFromTemplate("ntp_windows.tmpl", ntpAddr, ntpFile); err != nil {
 				return fmt.Errorf("generating ntp script: %w", err)
 			}
 		}

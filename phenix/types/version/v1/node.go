@@ -73,7 +73,7 @@ type Injection struct {
 	Description string `json:"description" yaml:"description"`
 	Owner	    string `json:"owner" ymal:"owner"`
 	Group	    string `json:"group" ymal:"group"`
-	Permission  string `json:"permission" ymal:"permission"`
+	Permissions string `json:"permissions" ymal:"permissions"`
 	Recursive   bool   `json:"recursive" ymal: "recursive"`
 }
 
@@ -119,15 +119,15 @@ func (this Node) FileInjects(basedir string) string {
 			injects[i] = basedir + "/" + inject.Src + ":" + inject.Dst
 		}
 		if inject.Owner == "" {
-			inject.Owner = "root"
+			inject.Owner = "0"
 		}
 		if inject.Group == "" {
-			inject.Group =  "root"
+			inject.Group =  "0"
 		}
-		if inject.Permission == "" {
-			inject.Permission = "0664"
+		if inject.Permissions == "" || len(inject.Permissions) > 4 {
+			inject.Permissions = "0664"
 		}
-		injects[i] = injects[i]+":"+inject.Owner+":"+inject.Group+":"+inject.Permission+":"+fmt.Sprintf("%t",inject.Recursive)
+		injects[i] = injects[i]+":"+inject.Owner+":"+inject.Group+":"+inject.Permissions+":"+fmt.Sprintf("%t",inject.Recursive)
 	}
 
 	return strings.Join(injects, " ")
