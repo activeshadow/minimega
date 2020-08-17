@@ -268,8 +268,8 @@ func diskInject(dst, partition string, pairs map[string]string, permissions map[
 		}
 		//Set Permissions on a file
 		if len(permissions) > 0 {
-			fmt.Printf("%v",permissions)
-			fmt.Printf("%v",permissions[dst])
+		//	fmt.Printf("%v",permissions)
+		//	fmt.Printf("%v",permissions[dst])
 			permission := strings.Split(permissions[dst]," ")
 			rFlag := "-v"
 			owner := fmt.Sprintf("%s:%s",permission[0],permission[1])

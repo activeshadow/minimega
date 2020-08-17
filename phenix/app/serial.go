@@ -46,6 +46,7 @@ func (Serial) Configure(exp *types.Experiment) error {
 			a := &v1.Injection{
 				Src:         serialFile,
 				Dst:         "/etc/phenix/serial-startup.bash",
+				Permissions:	"0755",
 				Description: "",
 			}
 
@@ -95,7 +96,7 @@ func (Serial) PreStart(exp *types.Experiment) error {
 
 			serialFile := startupDir + "/" + node.General.Hostname + "-serial.bash"
 
-			if err := tmpl.CreateFileFromTemplate("serial_startup.tmpl", serial, serialFile,0755); err != nil {
+			if err := tmpl.CreateFileFromTemplate("serial_startup.tmpl", serial, serialFile); err != nil {
 				return fmt.Errorf("generating serial script: %w", err)
 			}
 

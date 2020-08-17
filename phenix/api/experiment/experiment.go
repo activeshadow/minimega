@@ -296,7 +296,7 @@ func Start(name string, dryrun bool) error {
 
 	filename := fmt.Sprintf("%s/mm_files/%s.mm", exp.Spec.BaseDir, exp.Spec.ExperimentName)
 
-	if err := tmpl.CreateFileFromTemplate("minimega_script.tmpl", exp.Spec, filename,0644); err != nil {
+	if err := tmpl.CreateFileFromTemplate("minimega_script.tmpl", exp.Spec, filename); err != nil {
 		return fmt.Errorf("generating minimega script: %w", err)
 	}
 
