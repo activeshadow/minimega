@@ -7,6 +7,8 @@ import (
 	"phenix/api/experiment"
 	"phenix/store"
 	"phenix/types"
+	"phenix/types/version"
+	"phenix/types/version/upgrade"
 	v1 "phenix/types/version/v1"
 	"phenix/util"
 	"phenix/util/editor"
@@ -14,6 +16,26 @@ import (
 	"github.com/mitchellh/mapstructure"
 	"gopkg.in/yaml.v3"
 )
+
+func Init() error {
+	for _, name := range AssetNames() {
+		var c types.Config
+
+		if err := yaml.Unmarshal(MustAsset(name), &c); err != nil {
+			return fmt.Errorf("unmarshaling default config %s: %w", name, err)
+		}
+
+		if _, err := Get("role/" + c.Metadata.Name); err == nil {
+			continue
+		}
+
+		if err := store.Create(&c); err != nil {
+			return fmt.Errorf("storing default config %s: %w", name, err)
+		}
+	}
+
+	return nil
+}
 
 // List collects configs of the given type (topology, scenario, experiment). If
 // no config type is specified, or `all` is specified, then all the known
@@ -27,7 +49,7 @@ func List(which string) (types.Configs, error) {
 
 	switch which {
 	case "", "all":
-		configs, err = store.List("Topology", "Scenario", "Experiment", "Image")
+		configs, err = store.List("Topology", "Scenario", "Experiment", "Image", "User", "Role")
 	case "topology":
 		configs, err = store.List("Topology")
 	case "scenario":
@@ -36,6 +58,10 @@ func List(which string) (types.Configs, error) {
 		configs, err = store.List("Experiment")
 	case "image":
 		configs, err = store.List("Image")
+	case "user":
+		configs, err = store.List("User")
+	case "role":
+		configs, err = store.List("Role")
 	default:
 		return nil, util.HumanizeError(fmt.Errorf("unknown config kind provided: %s", which), "")
 	}
@@ -87,6 +113,59 @@ func Create(path string, validate bool) (*types.Config, error) {
 		return nil, fmt.Errorf("creating new config from file: %w", err)
 	}
 
+	// *** BEGIN config upgrade process ***
+
+	// Get current version of config being stored (ie. v1)
+	sv := version.StoredVersion[c.Kind]
+
+	// Check if the specified version of this config is the stored version.
+	if c.APIVersion() != sv {
+		// Specified version of this config is not the stored version, so get
+		// upgrader for the config kind.
+		upgrader := upgrade.GetUpgrader(c.Kind + "/" + sv)
+
+		// Abort if no upgrader is registered for this config kind.
+		if upgrader == nil {
+			return nil, fmt.Errorf("config needs to be upgraded to %s but no upgrader found", sv)
+		}
+
+		// Upgrade the config using the registered upgrader.
+		specs, err := upgrader.Upgrade(c.APIVersion(), c.Spec, c.Metadata)
+		if err != nil {
+			return nil, fmt.Errorf("upgrading config to %s: %w", sv, err)
+		}
+
+		// Track config to return, since upgrader may produce multiple configs (but
+		// only one of each kind).
+		var toReturn *types.Config
+
+		for _, s := range specs {
+			cfg, err := types.NewConfigFromSpec(c.Metadata.Name, s)
+			if err != nil {
+				return nil, fmt.Errorf("creating new config: %w", err)
+			}
+
+			if validate {
+				if err := types.ValidateConfigSpec(*cfg); err != nil {
+					return nil, fmt.Errorf("validating config: %w", err)
+				}
+			}
+
+			if err := store.Create(cfg); err != nil {
+				return nil, fmt.Errorf("storing config: %w", err)
+			}
+
+			if toReturn == nil && cfg.Kind == c.Kind {
+				toReturn = cfg
+			}
+		}
+
+		return toReturn, nil
+	}
+
+	// *** END config upgrade process ***
+
+	// TODO: consider using config hooks (once merged in) to handle this.
 	if c.Kind == "Experiment" {
 		if err := experiment.CreateFromConfig(c); err != nil {
 			return nil, fmt.Errorf("creating experiment config spec: %w", err)

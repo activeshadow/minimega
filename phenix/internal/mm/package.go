@@ -1,7 +1,5 @@
 package mm
 
-import "phenix/types"
-
 func ReadScriptFromFile(filename string) error {
 	return DefaultMM.ReadScriptFromFile(filename)
 }
@@ -14,8 +12,20 @@ func LaunchVMs(ns string) error {
 	return DefaultMM.LaunchVMs(ns)
 }
 
-func GetVMInfo(opts ...Option) types.VMs {
+func GetLaunchProgress(ns string, expected int) (float64, error) {
+	return DefaultMM.GetLaunchProgress(ns, expected)
+}
+
+func GetVMInfo(opts ...Option) VMs {
 	return DefaultMM.GetVMInfo(opts...)
+}
+
+func GetVMScreenshot(opts ...Option) ([]byte, error) {
+	return DefaultMM.GetVMScreenshot(opts...)
+}
+
+func GetVNCEndpoint(opts ...Option) (string, error) {
+	return DefaultMM.GetVNCEndpoint(opts...)
 }
 
 func StartVM(opts ...Option) error {
@@ -34,6 +44,10 @@ func KillVM(opts ...Option) error {
 	return DefaultMM.KillVM(opts...)
 }
 
+func GetVMHost(opts ...Option) (string, error) {
+	return DefaultMM.GetVMHost(opts...)
+}
+
 func ConnectVMInterface(opts ...Option) error {
 	return DefaultMM.ConnectVMInterface(opts...)
 }
@@ -50,16 +64,20 @@ func StopVMCapture(opts ...Option) error {
 	return DefaultMM.StopVMCapture(opts...)
 }
 
-func GetExperimentCaptures(opts ...Option) []types.Capture {
+func GetExperimentCaptures(opts ...Option) []Capture {
 	return DefaultMM.GetExperimentCaptures(opts...)
 }
 
-func GetVMCaptures(opts ...Option) []types.Capture {
+func GetVMCaptures(opts ...Option) []Capture {
 	return DefaultMM.GetVMCaptures(opts...)
 }
 
-func GetClusterHosts() (types.Hosts, error) {
+func GetClusterHosts() (Hosts, error) {
 	return DefaultMM.GetClusterHosts()
+}
+
+func IsHeadnode(node string) bool {
+	return DefaultMM.IsHeadnode(node)
 }
 
 func GetVLANs(opts ...Option) (map[string]int, error) {

@@ -1,0 +1,95 @@
+syntax = "proto3";
+
+option go_package = "web/proto";
+
+import "web/proto/vm.proto";
+import "google/protobuf/struct.proto";
+
+message VLAN {
+	uint32 vlan = 1;
+	string alias = 2;
+}
+
+message Experiment {
+	string id = 1;
+	string name = 2;
+	string topology = 3;
+	string scenario = 4;
+	string start_time = 5 [json_name="start_time"];
+	bool running = 6;
+	string status = 7;
+	uint32 vlan_min = 8 [json_name="vlan_min"];
+	uint32 vlan_max = 9 [json_name="vlan_max"];
+	repeated VLAN vlans = 10;
+	repeated VM vms = 12;
+	repeated string apps = 13;
+
+	// TODO: depricate
+	uint32 vlan_count = 14 [json_name="vlan_count"];
+	uint32 vm_count = 15 [json_name="vm_count"];
+}
+
+message ExperimentList {
+	repeated Experiment experiments = 1;
+}
+
+message Schedule {
+	string vm = 1;
+	string host = 2;
+	bool auto_assigned = 3;
+}
+
+message ExperimentSchedule {
+	repeated Schedule schedule = 1;
+}
+
+message TopologyList {
+	repeated string topologies = 1;
+}
+
+message ScenarioList {
+	// Key is scenario name, value is string slice of apps in scenario.
+	map<string, google.protobuf.ListValue> scenarios = 1;
+}
+
+message DiskList {
+	repeated string disks = 1;
+}
+
+message FileList {
+	repeated string files = 1;
+}
+
+message CreateExperimentRequest {
+	string name = 1;
+	string topology = 2;
+	string scenario = 3;
+	uint32 vlan_min = 4 [json_name="vlan_min"];
+	uint32 vlan_max = 5 [json_name="vlan_max"];
+}
+
+message SnapshotRequest {
+	string filename = 1;
+}
+
+message BackingImageRequest {
+	string filename = 1;
+}
+
+message BackingImageResponse {
+	string disk = 1;
+	VM vm = 2;
+}
+
+message StartCaptureRequest {
+  uint32 interface = 1;
+  string filename = 2;
+}
+
+message UpdateScheduleRequest {
+	string algorithm = 1;
+}
+
+message AppList {
+	repeated string applications = 1;
+}

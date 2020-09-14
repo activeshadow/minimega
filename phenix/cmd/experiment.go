@@ -114,20 +114,21 @@ func newExperimentCreateCmd() *cobra.Command {
 				return fmt.Errorf("Must provide an experiment name") // this does not work because of topology requirement
 			}
 
-			name := args[0]
+			opts := []experiment.CreateOption{
+				experiment.CreateWithName(args[0]),
+				experiment.CreateWithTopology(MustGetString(cmd.Flags(), "topology")),
+				experiment.CreateWithScenario(MustGetString(cmd.Flags(), "scenario")),
+				experiment.CreateWithBaseDirectory(MustGetString(cmd.Flags(), "base-dir")),
+				experiment.CreateWithVLANMin(MustGetInt(cmd.Flags(), "vlan-min")),
+				experiment.CreateWithVLANMax(MustGetInt(cmd.Flags(), "vlan-max")),
+			}
 
-			var (
-				topology = MustGetString(cmd.Flags(), "topology")
-				scenario = MustGetString(cmd.Flags(), "scenario")
-				baseDir  = MustGetString(cmd.Flags(), "base-dir")
-			)
-
-			if err := experiment.Create(name, topology, scenario, baseDir); err != nil {
-				err := util.HumanizeError(err, "Unable to create the "+name+" experiment")
+			if err := experiment.Create(opts...); err != nil {
+				err := util.HumanizeError(err, "Unable to create the "+args[0]+" experiment")
 				return err.Humanized()
 			}
 
-			fmt.Printf("The %s experiment was created\n", name)
+			fmt.Printf("The %s experiment was created\n", args[0])
 
 			return nil
 		},
@@ -137,6 +138,8 @@ func newExperimentCreateCmd() *cobra.Command {
 	cmd.MarkFlagRequired("topology")
 	cmd.Flags().StringP("scenario", "s", "", "Name of an existing scenario to use (optional)")
 	cmd.Flags().StringP("base-dir", "d", "", "Base directory to use for experiment (optional)")
+	cmd.Flags().Int("vlan-min", 0, "VLAN pool minimum")
+	cmd.Flags().Int("vlan-max", 0, "VLAN pool maximum")
 
 	return cmd
 }
@@ -190,17 +193,17 @@ func newExperimentScheduleCmd() *cobra.Command {
 		Long:  desc,
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			var (
-				exp  = args[0]
-				algo = args[1]
-			)
+			opts := []experiment.ScheduleOption{
+				experiment.ScheduleForName(args[0]),
+				experiment.ScheduleWithAlgorithm(args[1]),
+			}
 
-			if err := experiment.Schedule(exp, algo); err != nil {
-				err := util.HumanizeError(err, "Unable to schedule the "+exp+" experiment with the "+algo+" algorithm")
+			if err := experiment.Schedule(opts...); err != nil {
+				err := util.HumanizeError(err, "Unable to schedule the "+args[0]+" experiment with the "+args[1]+" algorithm")
 				return err.Humanized()
 			}
 
-			fmt.Printf("The %s experiment was scheduled with %s\n", exp, algo)
+			fmt.Printf("The %s experiment was scheduled with %s\n", args[0], args[1])
 
 			return nil
 		},
@@ -244,7 +247,14 @@ func newExperimentStartCmd() *cobra.Command {
 			}
 
 			for _, exp := range experiments {
-				if err := experiment.Start(exp, dryrun); err != nil {
+				opts := []experiment.StartOption{
+					experiment.StartWithName(exp),
+					experiment.StartWithDryRun(dryrun),
+					experiment.StartWithVLANMin(MustGetInt(cmd.Flags(), "vlan-min")),
+					experiment.StartWithVLANMax(MustGetInt(cmd.Flags(), "vlan-max")),
+				}
+
+				if err := experiment.Start(opts...); err != nil {
 					err := util.HumanizeError(err, "Unable to start the "+exp+" experiment")
 					return err.Humanized()
 				}
@@ -261,6 +271,8 @@ func newExperimentStartCmd() *cobra.Command {
 	}
 
 	cmd.Flags().BoolP("dry-run", "", false, "Do everything but actually call out to minimega")
+	cmd.Flags().Int("vlan-min", 0, "VLAN pool minimum")
+	cmd.Flags().Int("vlan-max", 0, "VLAN pool maximum")
 
 	return cmd
 }
@@ -333,7 +345,7 @@ func newExperimentRestartCmd() *cobra.Command {
 				return err.Humanized()
 			}
 
-			if err := experiment.Start(exp, dryrun); err != nil {
+			if err := experiment.Start(experiment.StartWithName(exp), experiment.StartWithDryRun(dryrun)); err != nil {
 				err := util.HumanizeError(err, "Unable to start the "+exp+" experiment")
 				return err.Humanized()
 			}

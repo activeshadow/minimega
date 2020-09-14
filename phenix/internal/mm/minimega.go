@@ -1,14 +1,21 @@
 package mm
 
 import (
+	"encoding/base64"
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
+	"phenix/internal/common"
 	"phenix/internal/mm/mmcli"
-	"phenix/types"
+)
+
+var (
+	ErrCaptureExists = fmt.Errorf("capture already exists")
+	ErrNoCaptures    = fmt.Errorf("no captures exist")
 )
 
 type Minimega struct{}
@@ -36,7 +43,7 @@ func (Minimega) ClearNamespace(ns string) error {
 }
 
 func (Minimega) LaunchVMs(ns string) error {
-	cmd := mmcli.NewCommand()
+	cmd := mmcli.NewNamespacedCommand(ns)
 	cmd.Command = "vm launch"
 
 	if err := mmcli.ErrorResponse(mmcli.Run(cmd)); err != nil {
@@ -52,21 +59,64 @@ func (Minimega) LaunchVMs(ns string) error {
 	return nil
 }
 
-func (this Minimega) GetVMInfo(opts ...Option) types.VMs {
+func (Minimega) GetLaunchProgress(ns string, expected int) (float64, error) {
+	var queued int
+
+	cmd := mmcli.NewNamespacedCommand(ns)
+	cmd.Command = "ns queue"
+
+	re := regexp.MustCompile(`Names: (.*)`)
+
+	for resps := range mmcli.Run(cmd) {
+		for _, resp := range resps.Resp {
+			if resp.Error != "" {
+				continue
+			}
+
+			for _, m := range re.FindAllStringSubmatch(resp.Response, -1) {
+				queued += len(strings.Split(m[1], ","))
+			}
+		}
+	}
+
+	// `ns queue` will be empty once queued VMs have been launched.
+
+	if queued == 0 {
+		cmd.Command = "vm info"
+		cmd.Columns = []string{"state"}
+
+		status := mmcli.RunTabular(cmd)
+
+		if len(status) == 0 {
+			return 0.0, nil
+		}
+
+		for _, s := range status {
+			if s["state"] == "BUILDING" {
+				queued++
+			}
+		}
+	}
+
+	return float64(queued) / float64(expected), nil
+
+}
+
+func (this Minimega) GetVMInfo(opts ...Option) VMs {
 	o := NewOptions(opts...)
 
 	cmd := mmcli.NewNamespacedCommand(o.ns)
 	cmd.Command = "vm info"
-	cmd.Columns = []string{"host", "name", "state", "uptime", "vlan", "tap"}
+	cmd.Columns = []string{"host", "name", "state", "uptime", "vlan", "tap", "memory", "vcpus", "disks"}
 
 	if o.vm != "" {
 		cmd.Filters = []string{"name=" + o.vm}
 	}
 
-	var vms types.VMs
+	var vms VMs
 
 	for _, row := range mmcli.RunTabular(cmd) {
-		var vm types.VM
+		var vm VM
 
 		vm.Host = row["host"]
 		vm.Name = row["name"]
@@ -97,10 +147,103 @@ func (this Minimega) GetVMInfo(opts ...Option) types.VMs {
 			vm.Uptime = uptime.Seconds()
 		}
 
+		vm.RAM, _ = strconv.Atoi(row["memory"])
+		vm.CPUs, _ = strconv.Atoi(row["vcpus"])
+
+		// TODO: confirm multiple disks are separated by whitespace.
+		disk := strings.Fields(row["disks"])[0]
+		// diskspec can include multiple settings separated by comma. Path to disk
+		// will always be first setting.
+		disk = strings.Split(disk, ",")[0]
+
+		cmd = mmcli.NewCommand()
+		cmd.Command = "disk info " + disk
+
+		// Only expect one row returned
+		resp := mmcli.RunTabular(cmd)[0]
+
+		if resp["backingfile"] == "" {
+			vm.Disk = resp["image"]
+		} else {
+			vm.Disk = resp["backingfile"]
+		}
+
 		vms = append(vms, vm)
 	}
 
 	return vms
+}
+
+func (Minimega) GetVMScreenshot(opts ...Option) ([]byte, error) {
+	o := NewOptions(opts...)
+
+	cmd := mmcli.NewNamespacedCommand(o.ns)
+	cmd.Command = fmt.Sprintf("vm screenshot %s file /dev/null %s", o.vm, o.screenshotSize)
+
+	var screenshot []byte
+
+	for resps := range mmcli.Run(cmd) {
+		for _, resp := range resps.Resp {
+			if resp.Error != "" {
+				if strings.HasPrefix(resp.Error, "vm not running:") {
+					continue
+				} else if resp.Error == "cannot take screenshot of container" {
+					continue
+				}
+
+				// Unknown error
+				return nil, fmt.Errorf("unknown error getting VM screenshot: %s", resp.Error)
+			}
+
+			if resp.Data == nil {
+				return nil, fmt.Errorf("not found")
+			}
+
+			if screenshot == nil {
+				var err error
+
+				screenshot, err = base64.StdEncoding.DecodeString(resp.Data.(string))
+				if err != nil {
+					return nil, fmt.Errorf("decoding screenshot: %s", err)
+				}
+			} else {
+				return nil, fmt.Errorf("received more than one screenshot")
+			}
+		}
+	}
+
+	if screenshot == nil {
+		return nil, fmt.Errorf("not found")
+	}
+
+	return screenshot, nil
+}
+
+func (Minimega) GetVNCEndpoint(opts ...Option) (string, error) {
+	o := NewOptions(opts...)
+
+	cmd := mmcli.NewNamespacedCommand(o.ns)
+	cmd.Command = "vm info"
+	cmd.Columns = []string{"host", "vnc_port"}
+	cmd.Filters = []string{"type=kvm", fmt.Sprintf("name=%s", o.vm)}
+
+	var endpoint string
+
+	for _, vm := range mmcli.RunTabular(cmd) {
+		host := vm["host"]
+
+		if IsHeadnode(host) {
+			host = "localhost"
+		}
+
+		endpoint = fmt.Sprintf("%s:%s", host, vm["vnc_port"])
+	}
+
+	if endpoint == "" {
+		return "", fmt.Errorf("not found")
+	}
+
+	return endpoint, nil
 }
 
 func (Minimega) StartVM(opts ...Option) error {
@@ -247,6 +390,23 @@ func (Minimega) KillVM(opts ...Option) error {
 	return flush(o.ns)
 }
 
+func (Minimega) GetVMHost(opts ...Option) (string, error) {
+	o := NewOptions(opts...)
+
+	cmd := mmcli.NewNamespacedCommand(o.ns)
+	cmd.Command = "vm info"
+	cmd.Columns = []string{"host"}
+	cmd.Filters = []string{"name=" + o.vm}
+
+	status := mmcli.RunTabular(cmd)
+
+	if len(status) == 0 {
+		return "", fmt.Errorf("VM %s not found", o.vm)
+	}
+
+	return status[0]["host"], nil
+}
+
 func (Minimega) ConnectVMInterface(opts ...Option) error {
 	o := NewOptions(opts...)
 
@@ -276,6 +436,14 @@ func (Minimega) DisconnectVMInterface(opts ...Option) error {
 func (Minimega) StartVMCapture(opts ...Option) error {
 	o := NewOptions(opts...)
 
+	captures := GetVMCaptures(opts...)
+
+	for _, capture := range captures {
+		if capture.Interface == o.captureIface {
+			return ErrCaptureExists
+		}
+	}
+
 	cmd := mmcli.NewNamespacedCommand(o.ns)
 	cmd.Command = fmt.Sprintf("capture pcap vm %s %d %s", o.vm, o.captureIface, o.captureFile)
 
@@ -287,6 +455,12 @@ func (Minimega) StartVMCapture(opts ...Option) error {
 }
 
 func (Minimega) StopVMCapture(opts ...Option) error {
+	captures := GetVMCaptures(opts...)
+
+	if len(captures) == 0 {
+		return ErrNoCaptures
+	}
+
 	o := NewOptions(opts...)
 
 	cmd := mmcli.NewNamespacedCommand(o.ns)
@@ -299,14 +473,14 @@ func (Minimega) StopVMCapture(opts ...Option) error {
 	return nil
 }
 
-func (Minimega) GetExperimentCaptures(opts ...Option) []types.Capture {
+func (Minimega) GetExperimentCaptures(opts ...Option) []Capture {
 	o := NewOptions(opts...)
 
 	cmd := mmcli.NewNamespacedCommand(o.ns)
 	cmd.Command = "capture"
 	cmd.Columns = []string{"interface", "path"}
 
-	var captures []types.Capture
+	var captures []Capture
 
 	for _, row := range mmcli.RunTabular(cmd) {
 		// `interface` column will be in the form of <vm_name>:<iface_idx>
@@ -315,7 +489,7 @@ func (Minimega) GetExperimentCaptures(opts ...Option) []types.Capture {
 		vm := iface[0]
 		idx, _ := strconv.Atoi(iface[1])
 
-		capture := types.Capture{
+		capture := Capture{
 			VM:        vm,
 			Interface: idx,
 			Filepath:  row["path"],
@@ -327,12 +501,12 @@ func (Minimega) GetExperimentCaptures(opts ...Option) []types.Capture {
 	return captures
 }
 
-func (this Minimega) GetVMCaptures(opts ...Option) []types.Capture {
+func (this Minimega) GetVMCaptures(opts ...Option) []Capture {
 	o := NewOptions(opts...)
 
 	var (
 		captures = this.GetExperimentCaptures(opts...)
-		keep     []types.Capture
+		keep     []Capture
 	)
 
 	for _, capture := range captures {
@@ -344,22 +518,26 @@ func (this Minimega) GetVMCaptures(opts ...Option) []types.Capture {
 	return keep
 }
 
-func (Minimega) GetClusterHosts() (types.Hosts, error) {
+func (Minimega) GetClusterHosts() (Hosts, error) {
 	// Get headnode details
 	hosts, err := processNamespaceHosts("minimega")
 	if err != nil {
 		return nil, fmt.Errorf("processing headnode details: %w", err)
 	}
 
+	if len(hosts) == 0 {
+		return []Host{}, fmt.Errorf("no cluster hosts found")
+	}
+
 	head := hosts[0]
-	head.Name = head.Name + " (headnode)"
 	head.Schedulable = false
+	head.Headnode = true
 
-	cluster := []types.Host{head}
+	var cluster []Host
 
-	// Used below to ensure the headnode doesn't show up in the list of
-	// cluster nodes twice.
-	headnode := hosts[0].Name
+	// Clear dummy namespace used for getting compute nodes in case a new compute
+	// node has been added since the last time the dummy namespace was created.
+	ClearNamespace("__phenix__")
 
 	// Get compute nodes details
 	hosts, err = processNamespaceHosts("__phenix__")
@@ -370,7 +548,8 @@ func (Minimega) GetClusterHosts() (types.Hosts, error) {
 	for _, host := range hosts {
 		// This will happen if the headnode is included as a compute node
 		// (ie. when there's only one node in the cluster).
-		if host.Name == headnode {
+		if host.Name == head.Name {
+			head.Schedulable = true
 			continue
 		}
 
@@ -378,7 +557,34 @@ func (Minimega) GetClusterHosts() (types.Hosts, error) {
 		cluster = append(cluster, host)
 	}
 
+	cluster = append(cluster, head)
+
 	return cluster, nil
+}
+
+func (Minimega) IsHeadnode(node string) bool {
+	// Get headnode details
+	hosts, _ := processNamespaceHosts("minimega")
+
+	if len(hosts) == 0 {
+		return false // ???
+	}
+
+	headnode := hosts[0].Name
+
+	// Trim host name suffixes (like -minimega, or -gophenix) potentially added to
+	// Docker containers by Docker Compose config.
+	for _, s := range strings.Split(common.HostnameSuffixes, ",") {
+		headnode = strings.TrimSuffix(headnode, s)
+	}
+
+	// Trim node name suffixes (like -minimega, or -gophenix) potentially added to
+	// Docker containers by Docker Compose config.
+	for _, s := range strings.Split(common.HostnameSuffixes, ",") {
+		node = strings.TrimSuffix(node, s)
+	}
+
+	return node == headnode
 }
 
 func (Minimega) GetVLANs(opts ...Option) (map[string]int, error) {
@@ -429,17 +635,17 @@ func inject(disk string, part int, injects ...string) error {
 	return nil
 }
 
-func processNamespaceHosts(namespace string) (types.Hosts, error) {
+func processNamespaceHosts(namespace string) (Hosts, error) {
 	cmd := mmcli.NewNamespacedCommand(namespace)
 	cmd.Command = "host"
 
 	var (
-		hosts  types.Hosts
+		hosts  Hosts
 		status = mmcli.RunTabular(cmd)
 	)
 
 	for _, row := range status {
-		host := types.Host{Name: row["host"]}
+		host := Host{Name: row["host"]}
 		host.CPUs, _ = strconv.Atoi(row["cpus"])
 		host.CPUCommit, _ = strconv.Atoi(row["cpucommit"])
 		host.Load = strings.Split(row["load"], " ")

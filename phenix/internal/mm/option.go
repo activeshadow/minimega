@@ -17,6 +17,8 @@ type options struct {
 
 	captureIface int
 	captureFile  string
+
+	screenshotSize string
 }
 
 func NewOptions(opts ...Option) options {
@@ -35,7 +37,7 @@ func NS(n string) Option {
 	}
 }
 
-func VM(v string) Option {
+func VMName(v string) Option {
 	return func(o *options) {
 		o.vm = v
 	}
@@ -98,5 +100,11 @@ func CaptureInterface(i int) Option {
 func CaptureFile(f string) Option {
 	return func(o *options) {
 		o.captureFile = f
+	}
+}
+
+func ScreenshotSize(s string) Option {
+	return func(o *options) {
+		o.screenshotSize = s
 	}
 }

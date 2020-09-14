@@ -100,7 +100,7 @@ func newVMPauseCmd() *cobra.Command {
 func newVMResumeCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "resume <experiment name> <vm name>",
-		Short: "Resume a paused VM fora  specific experiment",
+		Short: "Resume a paused VM for a specific experiment",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 2 {
 				return fmt.Errorf("Must provide an experiment and VM name")
@@ -132,14 +132,14 @@ func newVMRedeployCmd() *cobra.Command {
 		part int
 	)
 
-	desc := `Redeploy a running experiment
+	desc := `Redeploy a running experiment VM
 	 
   Used to redeploy a running virtual machine for a specific experiment; several 
   values can be modified`
 
 	cmd := &cobra.Command{
 		Use:   "redeploy <experiment name> <vm name>",
-		Short: "Redeploy a running experiment",
+		Short: "Redeploy a running experiment VM",
 		Long:  desc,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 2 {
@@ -264,7 +264,7 @@ func newVMNetCmd() *cobra.Command {
 		Short: "Connect a VM interface to a VLAN",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 4 {
-				return fmt.Errorf("Must provide all arguments")
+				return fmt.Errorf("Must provide an experiment name, VM name, iface index, and VLAN ID")
 			}
 
 			var (
@@ -294,7 +294,7 @@ func newVMNetCmd() *cobra.Command {
 		Short: "Disconnect a VM interface",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 3 {
-				return fmt.Errorf("Must provide all arguments")
+				return fmt.Errorf("Must provide an experiment name, VM name, and iface index>")
 			}
 
 			var (
@@ -344,7 +344,7 @@ func newVMCaptureCmd() *cobra.Command {
 		Short: "Start a packet capture",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 4 {
-				return fmt.Errorf("Must provide all arguments")
+				return fmt.Errorf("Must provide an experiment name, VM name, iface index, and /path/to/out file")
 			}
 
 			var (
@@ -374,7 +374,7 @@ func newVMCaptureCmd() *cobra.Command {
 		Short: "Stop all packet captures",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) != 2 {
-				return fmt.Errorf("Must provide all arguments")
+				return fmt.Errorf("Must provide an experiment and VM name")
 			}
 
 			var (

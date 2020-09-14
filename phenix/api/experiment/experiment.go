@@ -2,10 +2,13 @@ package experiment
 
 import (
 	"fmt"
+	"io/ioutil"
 	"strings"
 	"time"
 
 	"phenix/app"
+	"phenix/internal/common"
+	"phenix/internal/file"
 	"phenix/internal/mm"
 	"phenix/scheduler"
 	"phenix/store"
@@ -87,44 +90,62 @@ func Get(name string) (*types.Experiment, error) {
 // which case the default value of `/phenix/experiments/{name}` is used for the
 // experiment base directory. It returns any errors encountered while creating
 // the experiment.
-func Create(name, topoName, scenarioName, baseDir string) error {
-	if name == "" {
+func Create(opts ...CreateOption) error {
+	o := newCreateOptions(opts...)
+
+	if o.name == "" {
 		return fmt.Errorf("no experiment name provided")
 	}
 
-	if topoName == "" {
+	if o.topology == "" {
 		return fmt.Errorf("no topology name provided")
 	}
 
-	topo, _ := types.NewConfig("topology/" + topoName)
+	topo, _ := types.NewConfig("topology/" + o.topology)
 
 	if err := store.Get(topo); err != nil {
 		return fmt.Errorf("topology doesn't exist")
 	}
 
 	meta := types.ConfigMetadata{
-		Name: name,
+		Name: o.name,
 		Annotations: map[string]string{
-			"topology": topoName,
+			"topology": o.topology,
 		},
 	}
 
+	vlans := v1.VLANSpec{
+		Aliases: make(v1.VLANAliases),
+		Min:     o.vlanMin,
+		Max:     o.vlanMax,
+	}
+
 	spec := map[string]interface{}{
-		"experimentName": name,
-		"baseDir":        baseDir,
+		"experimentName": o.name,
+		"baseDir":        o.baseDir,
 		"topology":       topo.Spec,
+		"vlans":          &vlans,
 	}
 
 	var scenario *types.Config
 
-	if scenarioName != "" {
-		scenario, _ = types.NewConfig("scenario/" + scenarioName)
+	if o.scenario != "" {
+		scenario, _ = types.NewConfig("scenario/" + o.scenario)
 
 		if err := store.Get(scenario); err != nil {
 			return fmt.Errorf("scenario doesn't exist")
 		}
 
-		meta.Annotations["scenario"] = scenarioName
+		topo, ok := scenario.Metadata.Annotations["topology"]
+		if !ok {
+			return fmt.Errorf("topology annotation missing from scenario")
+		}
+
+		if topo != o.topology {
+			return fmt.Errorf("experiment/scenario topology mismatch")
+		}
+
+		meta.Annotations["scenario"] = o.scenario
 		spec["scenario"] = scenario.Spec
 	}
 
@@ -228,11 +249,13 @@ func create(c *types.Config) error {
 // Schedule applies the given scheduling algorithm to the experiment with the
 // given name. It returns any errors encountered while scheduling the
 // experiment.
-func Schedule(name, algo string) error {
-	c, _ := types.NewConfig("experiment/" + name)
+func Schedule(opts ...ScheduleOption) error {
+	o := newScheduleOptions(opts...)
+
+	c, _ := types.NewConfig("experiment/" + o.name)
 
 	if err := store.Get(c); err != nil {
-		return fmt.Errorf("getting experiment %s from store: %w", name, err)
+		return fmt.Errorf("getting experiment %s from store: %w", o.name, err)
 	}
 
 	status := new(v1.ExperimentStatus)
@@ -251,7 +274,7 @@ func Schedule(name, algo string) error {
 		return fmt.Errorf("decoding experiment spec: %w", err)
 	}
 
-	if err := scheduler.Schedule(algo, exp); err != nil {
+	if err := scheduler.Schedule(o.algorithm, exp); err != nil {
 		return fmt.Errorf("running scheduler algorithm: %w", err)
 	}
 
@@ -266,11 +289,13 @@ func Schedule(name, algo string) error {
 
 // Start starts the experiment with the given name. It returns any errors
 // encountered while starting the experiment.
-func Start(name string, dryrun bool) error {
-	c, _ := types.NewConfig("experiment/" + name)
+func Start(opts ...StartOption) error {
+	o := newStartOptions(opts...)
+
+	c, _ := types.NewConfig("experiment/" + o.name)
 
 	if err := store.Get(c); err != nil {
-		return fmt.Errorf("getting experiment %s from store: %w", name, err)
+		return fmt.Errorf("getting experiment %s from store: %w", o.name, err)
 	}
 
 	var status v1.ExperimentStatus
@@ -289,6 +314,14 @@ func Start(name string, dryrun bool) error {
 		return fmt.Errorf("decoding experiment spec: %w", err)
 	}
 
+	if o.vlanMin != 0 {
+		spec.VLANs.Min = o.vlanMin
+	}
+
+	if o.vlanMax != 0 {
+		spec.VLANs.Max = o.vlanMax
+	}
+
 	exp := types.Experiment{Metadata: c.Metadata, Spec: &spec, Status: &status}
 
 	if err := app.ApplyApps(app.ACTIONPRESTART, &exp); err != nil {
@@ -301,14 +334,16 @@ func Start(name string, dryrun bool) error {
 		return fmt.Errorf("generating minimega script: %w", err)
 	}
 
-	if dryrun {
+	if o.dryrun {
 		status.VLANs = spec.VLANs.Aliases
 	} else {
 		if err := mm.ReadScriptFromFile(filename); err != nil {
+			mm.ClearNamespace(exp.Spec.ExperimentName)
 			return fmt.Errorf("reading minimega script: %w", err)
 		}
 
 		if err := mm.LaunchVMs(exp.Spec.ExperimentName); err != nil {
+			mm.ClearNamespace(exp.Spec.ExperimentName)
 			return fmt.Errorf("launching experiment VMs: %w", err)
 		}
 
@@ -328,7 +363,7 @@ func Start(name string, dryrun bool) error {
 		status.VLANs = vlans
 	}
 
-	if dryrun {
+	if o.dryrun {
 		status.StartTime = time.Now().Format(time.RFC3339) + "-DRYRUN"
 	} else {
 		status.StartTime = time.Now().Format(time.RFC3339)
@@ -399,6 +434,22 @@ func Stop(name string) error {
 	return nil
 }
 
+func Running(name string) bool {
+	c, _ := types.NewConfig("experiment/" + name)
+
+	if err := store.Get(c); err != nil {
+		return false
+	}
+
+	var status v1.ExperimentStatus
+
+	if err := mapstructure.Decode(c.Status, &status); err != nil {
+		return false
+	}
+
+	return status.Running()
+}
+
 func Save(opts ...SaveOption) error {
 	o := newSaveOptions(opts...)
 
@@ -433,4 +484,48 @@ func Save(opts ...SaveOption) error {
 	}
 
 	return nil
+}
+
+func Delete(name string) error {
+	if Running(name) {
+		return fmt.Errorf("cannot delete a running experiment")
+	}
+
+	c, _ := types.NewConfig("experiment/" + name)
+
+	if err := store.Get(c); err != nil {
+		return fmt.Errorf("getting experiment %s: %w", name, err)
+	}
+
+	if err := store.Delete(c); err != nil {
+		return fmt.Errorf("deleting experiment %s: %w", name, err)
+	}
+
+	return nil
+}
+
+func Files(name string) ([]string, error) {
+	return file.GetExperimentFileNames(name)
+}
+
+func File(name, fileName string) ([]byte, error) {
+	files, err := file.GetExperimentFileNames(name)
+	if err != nil {
+		return nil, fmt.Errorf("getting list of experiment files: %w", err)
+	}
+
+	for _, f := range files {
+		if fileName == f {
+			path := fmt.Sprintf("%s/%s/files/%s", common.PhenixBase, name, f)
+
+			data, err := ioutil.ReadFile(path)
+			if err != nil {
+				return nil, fmt.Errorf("reading contents of file: %w", err)
+			}
+
+			return data, nil
+		}
+	}
+
+	return nil, fmt.Errorf("file not found")
 }

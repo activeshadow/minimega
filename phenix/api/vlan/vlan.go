@@ -34,7 +34,11 @@ func Aliases(opts ...Option) (map[string]v1.VLANAliases, error) {
 	}
 
 	for _, exp := range exps {
-		info[exp.Metadata.Name] = exp.Spec.VLANs.Aliases
+		if exp.Status.StartTime != "" {
+			info[exp.Metadata.Name] = exp.Status.VLANs
+		} else {
+			info[exp.Metadata.Name] = exp.Spec.VLANs.Aliases
+		}
 	}
 
 	return info, nil
@@ -76,7 +80,7 @@ func SetAlias(opts ...Option) error {
 
 	exp.Spec.VLANs.Aliases[o.alias] = o.id
 
-	if err := experiment.Save(experiment.Name(o.exp), experiment.Spec(exp.Spec)); err != nil {
+	if err := experiment.Save(experiment.SaveWithName(o.exp), experiment.SaveWithSpec(exp.Spec)); err != nil {
 		return fmt.Errorf("saving updated spec for experiment %s: %w", o.exp, err)
 	}
 
@@ -110,7 +114,26 @@ func Ranges(opts ...Option) (map[string][2]int, error) {
 	}
 
 	for _, exp := range exps {
-		info[exp.Metadata.Name] = [2]int{exp.Spec.VLANs.Min, exp.Spec.VLANs.Max}
+		if exp.Status.Running() {
+			var (
+				min = 0
+				max = 0
+			)
+
+			for _, k := range exp.Status.VLANs {
+				if min == 0 || k < min {
+					min = k
+				}
+
+				if max == 0 || k > max {
+					max = k
+				}
+			}
+
+			info[exp.Metadata.Name] = [2]int{min, max}
+		} else {
+			info[exp.Metadata.Name] = [2]int{exp.Spec.VLANs.Min, exp.Spec.VLANs.Max}
+		}
 	}
 
 	return info, nil
@@ -162,7 +185,7 @@ func SetRange(opts ...Option) error {
 	exp.Spec.VLANs.Min = o.min
 	exp.Spec.VLANs.Max = o.max
 
-	if err := experiment.Save(experiment.Name(o.exp), experiment.Spec(exp.Spec)); err != nil {
+	if err := experiment.Save(experiment.SaveWithName(o.exp), experiment.SaveWithSpec(exp.Spec)); err != nil {
 		return fmt.Errorf("saving updated spec for experiment %s: %w", o.exp, err)
 	}
 

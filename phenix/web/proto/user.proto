@@ -1,0 +1,52 @@
+syntax = "proto3";
+
+option go_package = "web/proto";
+
+message SignupUserRequest {
+  string username = 1;
+  string password = 2;
+  string first_name = 3 [json_name="first_name"];
+  string last_name = 4 [json_name="last_name"];
+}
+
+message User {
+  string username = 1;
+  string first_name = 2 [json_name="first_name"];
+  string last_name = 3 [json_name="last_name"];
+  string role_name = 4 [json_name="role_name"];
+  repeated string resource_names = 5 [json_name="resource_names"];
+}
+
+message UserList {
+  repeated User users = 1;
+}
+
+message CreateUserRequest {
+  string username = 1;
+  string password = 2;
+  string first_name = 3 [json_name="first_name"];
+  string last_name = 4 [json_name="last_name"];
+  string role_name = 5 [json_name="role_name"];
+  repeated string resource_names = 6 [json_name="resource_names"];
+}
+
+message UpdateUserRequest {
+  string username = 1;
+  string first_name = 2 [json_name="first_name"];
+  string last_name = 3 [json_name="last_name"];
+  string role_name = 4 [json_name="role_name"];
+  repeated string resource_names = 5 [json_name="resource_names"];
+}
+
+message LoginRequest {
+  string user = 1;
+  string pass = 2;
+}
+
+message LoginResponse {
+  string username = 1;
+  string first_name = 2 [json_name="first_name"];
+  string last_name = 3 [json_name="last_name"];
+  string token = 4;
+  string role = 5;
+}
