@@ -3,7 +3,8 @@ package v1
 import (
 	"fmt"
 	"strings"
-	"fmt"
+	"strconv"
+	"os"
 )
 
 type VMType string
@@ -72,10 +73,7 @@ type Injection struct {
 	Src         string `json:"src" yaml:"src"`
 	Dst         string `json:"dst" yaml:"dst"`
 	Description string `json:"description" yaml:"description"`
-	Owner	    string `json:"owner" ymal:"owner"`
-	Group	    string `json:"group" ymal:"group"`
 	Permissions string `json:"permissions" ymal:"permissions"`
-	Recursive   bool   `json:"recursive" ymal: "recursive"`
 }
 
 func (this *Node) SetDefaults() {
@@ -119,18 +117,13 @@ func (this Node) FileInjects(basedir string) string {
 		} else {
 			injects[i] = fmt.Sprintf(`"%s/%s":"%s"`, basedir, inject.Src, inject.Dst)
 		}
-		if inject.Owner == "" {
-			inject.Owner = "0"
-		}
-		if inject.Group == "" {
-			inject.Group =  "0"
-		}
 		if inject.Permissions == "" || len(inject.Permissions) > 4 {
 			inject.Permissions = "0664"
 		}
-		injects[i] = injects[i]+":"+inject.Owner+":"+inject.Group+":"+inject.Permissions+":"+fmt.Sprintf("%t",inject.Recursive)
+		perms,_ := strconv.ParseInt(inject.Permissions,8,64)
+		err :=  os.Chmod(inject.Src,os.FileMode(perms))
+		fmt.Println("File %s injected to $s with permissions %s i: %v",inject.Src,inject.Dst,inject.Permissions,err)
 	}
-
 	return strings.Join(injects, " ")
 }
 

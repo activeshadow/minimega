@@ -119,6 +119,7 @@ components:
               enum:
               - kvm
               - container
+              - ""
               default: kvm
               example: kvm
             snapshot:
@@ -126,11 +127,13 @@ components:
               title: Snapshot Mode
               default: false
               example: false
+              nullable: true
             do_not_boot:
               type: boolean
               title: Do Not Boot VM
               default: false
               example: false
+              nullable: true
         hardware:
           type: object
           title: Node Hardware Configuration
@@ -146,6 +149,7 @@ components:
               - Haswell
               - core2duo
               - pentium3
+              - ""
               default: Broadwell
               example: Broadwell
             vcpus:
@@ -194,6 +198,7 @@ components:
                     - floppy
                     - pflash
                     - virtio
+                    - ""
                     default: ide
                     example: ide
                   cache_mode:
@@ -205,6 +210,7 @@ components:
                     - unsafe
                     - directsync
                     - writethrough
+                    - ""
                     default: writeback
                     example: writeback
                   inject_partition:
@@ -212,6 +218,7 @@ components:
                     title: Disk Image Partition to Inject Files Into
                     default: 1
                     example: 2
+                    nullable: true
         network:
           type: object
           title: Node Network Configuration
@@ -412,290 +419,11 @@ components:
                 title: Destination Location to Inject File To
                 minLength: 1
                 example: sceptre/ACTIVSg2000.PWB
-              description:
-                type: string
-                title: Description of File Being Injected
                 example: PowerWorld case binary data
-              owner:
-                type: string
-                title: User whome owns injected file
-                example: www
-              group:
-                type: string
-                title: Group whom owns injected file
-                example: www
-              permissions: 
+              permissions:
                 type: string
                 title: Injected file permissions (UNIX style)
                 example: 0664
-              recursive: 
-                type: boolean
-                title: If path is a directiory and flag true set permissions recursively
-                example: True
-        metadata:
-          type: object
-          title: Node Metadata (typically used for app configuration)
-          properties:
-            infrastructure:
-              type: string
-              title: Infrastructure
-              enum:
-              - power_transmission
-              - power-distribution
-              - batch-process
-              default: power-transmission
-              example: power-transmission
-            provider:
-              type: string
-              title: Provider
-              default: power-provider
-              example: simulink-provider
-            simulator:
-              type: string
-              title: Simulator
-              enum:
-              - Dummy
-              - PSSE
-              - PyPower
-              - PowerWorld
-              - PowerWorldDynamics
-              - OpenDSS
-              - Simulink
-              default: PowerWorld
-              example: PowerWorld
-            publish_endpoint:
-              type: string
-              title: Publish Endpoint
-              default: udp://*;239.0.0.1:40000
-              example: udp://*;239.0.0.1:40000
-            cycle_time:
-              type: string
-              title: Cycle Time
-              default: 1000ms
-              example: 1000ms
-            dnp3:
-              type: array
-              title: DNP3
-              items:
-                $ref: "#/components/schemas/DNP3Metadata"
-            dnp3-serial:
-              type: array
-              title: DNP3 Serial
-              items:
-                $ref: "#/components/schemas/DNP3Metadata"
-            modbus:
-              type: array
-              title: Modbus
-              items:
-                $ref: "#/components/schemas/ModbusMetadata"
-            logic:
-              type: string
-              title: Logic
-              example: Tank1.fill_control = Tank1.tank_volume < Tank1.level_setpoint || (Tank1.tank_volume < 1.5*Tank1.level_setpoint && Tank1.fill_control == 1); Pump1.control = ! FillingStation1.request == 0 && Tank1.tank_volume>0; Pump1.active = 1==1
-              pattern: '^(.*)$'
-            connected_rtus:
-              type: array
-              title: Connected RTUs
-              items:
-                type: string
-                title: Connected RTU
-                example: rtu-1
-            connect_to_scada:
-              type: boolean
-              title: Connect to SCADA
-              default: false
-            manual_register_config:
-              type: boolean
-              title: Manual Register Configuration
-              default: false
-              example: false
-    DNP3Metadata:
-      type: object
-      title: DNP3 Metadata
-      required:
-      - type
-      - name
-      properties:
-        type:
-          type: string
-          title: Type
-          minLength: 1
-          example: bus
-        name:
-          type: string
-          title: Name
-          minLength: 1
-          example: bus-2052
-        analog-read:
-          type: array
-          title: The Analog Read Schema
-          items:
-            type: object
-            title: The Items Schema
-            required:
-            - field
-            - register_number
-            - register_type
-            properties:
-              field:
-                type: string
-                title: The Field Schema
-                minLength: 1
-                example: voltage
-              register_number:
-                type: integer
-                title: The Register Number Schema
-                default: 0
-              register_type:
-                type: string
-                title: The Register Type Schema
-                minLength: 1
-                example: analog-input
-        binary-read:
-          type: array
-          title: The Binary Read Schema
-          items:
-            type: object
-            title: The Items Schema
-            required:
-            - field
-            - register_number
-            - register_type
-            properties:
-              field:
-                type: string
-                title: The Field Schema
-                minLength: 1
-                example: active
-              register_number:
-                type: integer
-                title: The Register Number Schema
-                default: 0
-              register_type:
-                type: string
-                title: The Register Type Schema
-                minLength: 1
-                example: binary-input
-        binary-read-write:
-          type: array
-          title: The Binary Read-Write Schema
-          items:
-            type: object
-            title: The Items Schema
-            required:
-            - field
-            - register_number
-            - register_type
-            properties:
-              field:
-                type: string
-                title: The Field Schema
-                minLength: 1
-                example: active
-              register_number:
-                type: integer
-                title: The Register Number Schema
-                default: 0
-              register_type:
-                type: string
-                title: The Register Type Schema
-                minLength: 1
-                example: binary-output
-    ModbusMetadata:
-      type: object
-      title: Modbus Metadata
-      required:
-      - type
-      - name
-      properties:
-        type:
-          type: string
-          title: Type
-          minLength: 1
-          example: bus
-        name:
-          type: string
-          title: Name
-          minLength: 1
-          example: bus-2052
-        analog-read:
-          type: array
-          title: The Analog Read Schema
-          items:
-            type: object
-            title: The Items Schema
-            required:
-            - field
-            - register_number
-            - register_type
-            properties:
-              field:
-                type: string
-                title: The Field Schema
-                minLength: 1
-                example: voltage
-              register_number:
-                type: integer
-                title: The Register Number Schema
-                default: 0
-                example: 30000
-              register_type:
-                type: string
-                title: The Register Type Schema
-                minLength: 1
-                example: input-register
-        binary-read:
-          type: array
-          title: The Binary Read Schema
-          items:
-            type: object
-            title: The Items Schema
-            required:
-            - field
-            - register_number
-            - register_type
-            properties:
-              field:
-                type: string
-                title: The Field Schema
-                minLength: 1
-                example: active
-              register_number:
-                type: integer
-                title: The Register Number Schema
-                default: 0
-                example: 10000
-              register_type:
-                type: string
-                title: The Register Type Schema
-                minLength: 1
-                example: discrete-input
-        binary-read-write:
-          type: array
-          title: The Binary Read-Write Schema
-          items:
-            type: object
-            title: The Items Schema
-            required:
-            - field
-            - register_number
-            - register_type
-            properties:
-              field:
-                type: string
-                title: The Field Schema
-                minLength: 1
-                example: active
-              register_number:
-                type: integer
-                title: The Register Number Schema
-                default: 0
-                example: 0
-              register_type:
-                type: string
-                title: The Register Type Schema
-                minLength: 1
-                example: coil
     iface:
       type: object
       required:
