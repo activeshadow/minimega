@@ -11,7 +11,7 @@
 package main
 
 import (
-	//"encoding/base64"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -176,7 +176,7 @@ func validCommand(args []string) error {
 // userFromAuthHeader grabs the user's username from the Authorization
 // header. This header must exist in incoming requests.
 func userFromAuthHeader(r *http.Request) (string, error) {
-	/*authHeader := r.Header.Get("Authorization")
+	authHeader := r.Header.Get("Authorization")
 	if authHeader == "" {
 		return "", errors.New("Invalid user.")
 	}
@@ -189,8 +189,6 @@ func userFromAuthHeader(r *http.Request) (string, error) {
 
 	// Remove :password if it's there
 	return strings.Split(string(authInfo), ":")[0], nil
-	*/
-	return "igor",nil
 }
 
 // cmdHandler handles commands from clients (sent through
@@ -406,5 +404,5 @@ func main() {
 	http.HandleFunc("/run/", cmdHandler)
 
 	// spin up server on specified port
-	log.Fatal(http.ListenAndServe(":"+webP, nil).Error())
+	log.Fatal(http.ListenAndServe("127.0.0.1:"+webP, nil).Error())
 }
