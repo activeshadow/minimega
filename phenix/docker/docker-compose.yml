@@ -49,6 +49,7 @@ services:
     privileged: true
     cap_add:
       - ALL
+    tty: true
     <<: *common
     networks:
       phenix:
