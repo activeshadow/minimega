@@ -60,7 +60,7 @@ services:
     volumes:
       - /phenix:/phenix
       - /tmp/minimega:/tmp/minimega
-      - /var/log/phenix:/var/log/phenix
+      - /var/log/minimega:/var/log/minimega
       - /dev:/dev
       - /lib/modules:/lib/modules:ro
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
