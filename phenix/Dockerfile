@@ -9,11 +9,6 @@ WORKDIR /phenix/src/js
 ARG PHENIX_WEB_AUTH
 ENV VUE_APP_AUTH ${PHENIX_WEB_AUTH:-enabled}
 
-ARG NODE_TLS=1
-ENV NODE_TLS_REJECT_UNAUTHORIZED=$NODE_UNAUTH
-ARG STRICT_SSL=true
-ENV npm_config_strict_ssl=$STRICT_SSL
-
 RUN npm install \
   && npm run build
 
@@ -48,7 +43,7 @@ RUN apt-get update && apt-get install -y \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/* \
   && rm -rf /var/cache/apt/archives/*
-  
+
 ENV LANG en_US.UTF-8
 ENV LC_ALL en_US.UTF-8
 
