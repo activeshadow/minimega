@@ -39,7 +39,7 @@ ARG MM_BASE=/tmp/minimega
 ARG MM_FILEPATH=/phenix/images
 ARG MM_DEGREE=20
 ARG MM_LOGLEVEL=debug
-ARG MM_LOGFILE=/var/log/minimega/minimega.log
+ARG MM_LOGFILE=/var/log/minimega.log
 
 RUN echo "MM_BASE=${MM_BASE}" >> /etc/default/minimega \
   && echo "MM_FILEPATH=${MM_FILEPATH}" >> /etc/default/minimega \
