@@ -20,7 +20,7 @@ services:
         max-size: "10m"
     ports:
       - 9001:9001
-      - 11235:11235/udp
+      - 9000:9000/udp
     volumes:
       - /tmp/minimega:/tmp/minimega
       - /var/log/minimega:/var/log/minimega
