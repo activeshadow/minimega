@@ -60,8 +60,8 @@ services:
         aliases:
           - ${HOSTNAME}-minimega
     ports:
-      - 9001:9001
       - 9000:9000/udp
+      - 9001:9001
     volumes:
       - /phenix:/phenix
       - /tmp/minimega:/tmp/minimega
