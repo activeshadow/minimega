@@ -3,7 +3,7 @@ echo 'Configuring network interfaces...'
 $wmi = gwmi win32_NetworkAdapterConfiguration -Filter 'ipenabled = "true"' | sort -Property Description
 {{ $length := len .Node.Network.Interfaces }}
 {{ range $idx, $iface := .Node.Network.Interfaces }}
-{{ $mask := $iface.NetworkMask }}
+    {{ $mask := $iface.NetworkMask }}
 Do {
     {{ if gt $length 1 }}
     $status = $wmi[{{ $idx }}].EnableStatic('{{ $iface.Address }}', '{{ $mask }}')
@@ -13,11 +13,11 @@ Do {
     Start-Sleep -Milliseconds 500
 } While ($status.ReturnValue -eq 2147786788)
     {{ if ne $iface.Gateway "" }}
-      {{ if gt $length 1 }}
-    $wmi[{{ $idx }}].SetGateways('{{ $iface.Gateway }}', 1) | Out-Null
-      {{ else }}
-    $wmi.SetGateways('{{ $iface.Gateway }}', 1) | Out-Null
-      {{ end }}
+        {{ if gt $length 1 }}
+$wmi[{{ $idx }}].SetGateways('{{ $iface.Gateway }}', 1) | Out-Null
+        {{ else }}
+$wmi.SetGateways('{{ $iface.Gateway }}', 1) | Out-Null
+        {{ end }}
     {{ end }}
 {{ end }}
 {{ if .Metadata.domain_controller }}
