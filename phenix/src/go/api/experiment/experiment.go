@@ -329,7 +329,7 @@ func Start(opts ...StartOption) error {
 		exp.Spec.VLANs().SetMax(o.vlanMax)
 	}
 
-	if err := app.ApplyApps(exp, app.Stage(app.ACTIONPRESTART), app.DryRun(o.dryrun)); err != nil {
+	if err := app.ApplyApps(exp, app.Stage(app.ACTIONPRESTART), app.DryRun(o.dryrun), app.UseC2(o.useC2)); err != nil {
 		return fmt.Errorf("applying apps to experiment: %w", err)
 	}
 
@@ -384,10 +384,19 @@ func Start(opts ...StartOption) error {
 		exp.Status.SetStartTime(time.Now().Format(time.RFC3339))
 	}
 
-	filename = fmt.Sprintf("%s/mm_files/%s-cc.mm", exp.Spec.BaseDir(), exp.Spec.ExperimentName())
+	if o.useC2 {
+		filename = fmt.Sprintf("%s/mm_files/%s-cc.mm", exp.Spec.BaseDir(), exp.Spec.ExperimentName())
 
-	if err := tmpl.CreateFileFromTemplate("minimega_cc_script.tmpl", exp.Spec.Topology().Nodes(), filename); err != nil {
-		return fmt.Errorf("generating minimega script: %w", err)
+		if err := tmpl.CreateFileFromTemplate("minimega_cc_script.tmpl", exp.Spec.Topology().Nodes(), filename); err != nil {
+			return fmt.Errorf("generating minimega script: %w", err)
+		}
+
+		if !o.dryrun {
+			if err := mm.ReadScriptFromFile(filename); err != nil {
+				mm.ClearNamespace(exp.Spec.ExperimentName())
+				return fmt.Errorf("reading minimega cc script: %w", err)
+			}
+		}
 	}
 
 	if err := app.ApplyApps(exp, app.Stage(app.ACTIONPOSTSTART), app.DryRun(o.dryrun)); err != nil {

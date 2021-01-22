@@ -126,6 +126,8 @@ func ApplyApps(exp *types.Experiment, opts ...Option) error {
 	)
 
 	for _, a := range DefaultApps() {
+		a.Init(DryRun(options.DryRun), UseC2(options.UseC2))
+
 		switch options.Stage {
 		case ACTIONCONFIG:
 			err = a.Configure(exp)
@@ -162,7 +164,7 @@ func ApplyApps(exp *types.Experiment, opts ...Option) error {
 			}
 
 			a := GetApp(app.Name())
-			a.Init(Name(app.Name()), DryRun(options.DryRun))
+			a.Init(Name(app.Name()), DryRun(options.DryRun), UseC2(options.UseC2))
 
 			switch options.Stage {
 			case ACTIONCONFIG:

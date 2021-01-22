@@ -9,6 +9,7 @@ type Options struct {
 	Stage  Action
 	Name   string // used to set the app name
 	DryRun bool
+	UseC2  bool
 }
 
 // NewOptions returns an Options struct initialized with the given option list.
@@ -40,5 +41,12 @@ func Name(n string) Option {
 func DryRun(d bool) Option {
 	return func(o *Options) {
 		o.DryRun = d
+	}
+}
+
+// UseC2 sets whether the app should use C2 instead of file injects.
+func UseC2(u bool) Option {
+	return func(o *Options) {
+		o.UseC2 = u
 	}
 }

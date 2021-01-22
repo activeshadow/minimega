@@ -6,6 +6,14 @@ hostnamectl set-hostname {{ .hostname }}
 timedatectl set-timezone UTC
 timedatectl set-timezone {{ .timezone }}
 
+{{- if eq .os "linux" }}
 cp /tmp/minimega/files/{{ .namespace }}/{{ .hostname }}/interfaces /etc/network/interfaces
-
 systemctl restart networking
+{{- end }}
+
+{{- if or (eq .os "rhel") (eq .os "centos") }}
+  {{- range .ifaces }}
+cp /tmp/minimega/files/{{ .namespace }}/{{ .hostname }}/{{ . }} /etc/sysconfig/network-scripts
+  {{- end }}
+systemctl restart network
+{{- end }}

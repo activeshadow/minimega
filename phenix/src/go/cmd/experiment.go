@@ -293,6 +293,7 @@ func newExperimentStartCmd() *cobra.Command {
 			var (
 				name        = args[0]
 				dryrun      = MustGetBool(cmd.Flags(), "dry-run")
+				useC2       = MustGetBool(cmd.Flags(), "use-c2")
 				experiments []types.Experiment
 			)
 
@@ -325,6 +326,7 @@ func newExperimentStartCmd() *cobra.Command {
 					experiment.StartWithDryRun(dryrun),
 					experiment.StartWithVLANMin(MustGetInt(cmd.Flags(), "vlan-min")),
 					experiment.StartWithVLANMax(MustGetInt(cmd.Flags(), "vlan-max")),
+					experiment.StartWithC2(useC2),
 				}
 
 				if err := experiment.Start(opts...); err != nil {
@@ -343,7 +345,8 @@ func newExperimentStartCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().BoolP("dry-run", "", false, "Do everything but actually call out to minimega")
+	cmd.Flags().Bool("dry-run", false, "Do everything but actually call out to minimega")
+	cmd.Flags().Bool("use-c2", false, "Use minimega command and control instead of file injects")
 	cmd.Flags().Int("vlan-min", 0, "VLAN pool minimum")
 	cmd.Flags().Int("vlan-max", 0, "VLAN pool maximum")
 

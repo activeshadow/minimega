@@ -154,6 +154,7 @@ type startOptions struct {
 	dryrun  bool
 	vlanMin int
 	vlanMax int
+	useC2   bool
 }
 
 func newStartOptions(opts ...StartOption) startOptions {
@@ -187,5 +188,11 @@ func StartWithVLANMin(m int) StartOption {
 func StartWithVLANMax(m int) StartOption {
 	return func(o *startOptions) {
 		o.vlanMax = m
+	}
+}
+
+func StartWithC2(c bool) StartOption {
+	return func(o *startOptions) {
+		o.useC2 = c
 	}
 }
