@@ -17,6 +17,7 @@ type Node struct {
 	NetworkF    *Network          `json:"network" yaml:"network" structs:"network" mapstructure:"network"`
 	InjectionsF []*Injection      `json:"injections" yaml:"injections" structs:"injections" mapstructure:"injections"`
 	AdvancedF   map[string]string `json:"advanced" yaml:"advanced" structs:"advanced" mapstructure:"advanced"`
+	CommandsF   []string          `json:"commands" yaml:"commands" structs:"commands" mapstructure:"commands"`
 }
 
 func (this Node) Labels() map[string]string {
@@ -51,6 +52,10 @@ func (this Node) Injections() []ifaces.NodeInjection {
 
 func (this Node) Advanced() map[string]string {
 	return this.AdvancedF
+}
+
+func (this Node) Commands() []string {
+	return this.CommandsF
 }
 
 func (this *Node) AddInject(src, dst, perms, desc string) {
@@ -97,6 +102,16 @@ func (this *Node) AddAdvanced(config, value string) {
 	}
 
 	this.AdvancedF[config] = value
+}
+
+func (this *Node) AddCommand(cmd string) {
+	for _, c := range this.CommandsF {
+		if c == cmd {
+			return
+		}
+	}
+
+	this.CommandsF = append(this.CommandsF, cmd)
 }
 
 type General struct {

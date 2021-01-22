@@ -15,11 +15,13 @@ type NodeSpec interface {
 	Network() NodeNetwork
 	Injections() []NodeInjection
 	Advanced() map[string]string
+	Commands() []string
 
 	AddInject(string, string, string, string)
 	SetInjections([]NodeInjection)
 	SetAdvanced(map[string]string)
 	AddAdvanced(string, string)
+	AddCommand(string)
 }
 
 type NodeGeneral interface {

@@ -93,6 +93,32 @@ func (this Startup) PreStart(exp *types.Experiment) error {
 			if err := tmpl.CreateFileFromTemplate("linux_interfaces.tmpl", node, ifaceFile); err != nil {
 				return fmt.Errorf("generating linux interfaces config: %w", err)
 			}
+
+			// *** USE COMMAND AND CONTROL *** //
+
+			filePath := common.PhenixBase + "/images/" + exp.Spec.ExperimentName() + "/" + node.General().Hostname()
+
+			os.MkdirAll(filePath, 0755)
+
+			if err := tmpl.CreateFileFromTemplate("linux_interfaces.tmpl", node, filePath+"/interfaces"); err != nil {
+				return fmt.Errorf("generating linux interfaces config: %w", err)
+			}
+
+			data := map[string]interface{}{
+				"namespace": exp.Spec.ExperimentName(),
+				"hostname":  node.General().Hostname(),
+				"timezone":  timeZone,
+			}
+
+			if err := tmpl.CreateFileFromTemplate("linux-init.tmpl", data, filePath+"/init.sh"); err != nil {
+				return fmt.Errorf("generating Linux c2 init script: %w", err)
+			}
+
+			command := fmt.Sprintf("send %s/%s/*", exp.Spec.ExperimentName(), node.General().Hostname())
+			node.AddCommand(command)
+
+			command = fmt.Sprintf("exec bash /tmp/miniccc/files/%s/%s/init.sh", exp.Spec.ExperimentName(), node.General().Hostname())
+			node.AddCommand(command)
 		case "rhel", "centos":
 			var (
 				hostnameFile = startupDir + "/" + node.General().Hostname() + "-hostname.sh"

@@ -1,0 +1,11 @@
+#!/bin/bash
+
+sed -i -e 's/phenix/{{ .hostname }}/g' /etc/hosts
+hostnamectl set-hostname {{ .hostname }}
+
+timedatectl set-timezone UTC
+timedatectl set-timezone {{ .timezone }}
+
+cp /tmp/minimega/files/{{ .namespace }}/{{ .hostname }}/interfaces /etc/network/interfaces
+
+systemctl restart networking

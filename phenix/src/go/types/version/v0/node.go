@@ -52,6 +52,10 @@ func (Node) Advanced() map[string]string {
 	return nil
 }
 
+func (Node) Commands() []string {
+	return nil
+}
+
 func (this *Node) AddInject(src, dst, perms, desc string) {
 	this.InjectionsF = append(this.InjectionsF, &Injection{
 		SrcF:         src,
@@ -73,6 +77,7 @@ func (this *Node) SetInjections(injections []ifaces.NodeInjection) {
 
 func (Node) SetAdvanced(map[string]string) {}
 func (Node) AddAdvanced(string, string)    {}
+func (Node) AddCommand(string)             {}
 
 type General struct {
 	HostnameF    string `json:"hostname" yaml:"hostname" structs:"hostname" mapstructure:"hostname"`

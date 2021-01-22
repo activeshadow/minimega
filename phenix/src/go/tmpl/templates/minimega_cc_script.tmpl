@@ -1,0 +1,9 @@
+{{- range . }}
+  {{- if .Commands }}
+## VM: {{ .General.Hostname }} ##
+cc filter name={{ .General.Hostname }}
+    {{- range .Commands }}
+cc {{ . }}
+    {{- end }}
+  {{- end }}
+{{- end }}

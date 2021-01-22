@@ -384,6 +384,12 @@ func Start(opts ...StartOption) error {
 		exp.Status.SetStartTime(time.Now().Format(time.RFC3339))
 	}
 
+	filename = fmt.Sprintf("%s/mm_files/%s-cc.mm", exp.Spec.BaseDir(), exp.Spec.ExperimentName())
+
+	if err := tmpl.CreateFileFromTemplate("minimega_cc_script.tmpl", exp.Spec.Topology().Nodes(), filename); err != nil {
+		return fmt.Errorf("generating minimega script: %w", err)
+	}
+
 	if err := app.ApplyApps(exp, app.Stage(app.ACTIONPOSTSTART), app.DryRun(o.dryrun)); err != nil {
 		return fmt.Errorf("applying apps to experiment: %w", err)
 	}
