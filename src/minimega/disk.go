@@ -14,6 +14,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"syscall"
 	"time"
@@ -113,6 +114,8 @@ func diskInfo(image string) (DiskInfo, error) {
 		return info, fmt.Errorf("%v: %v", out, err)
 	}
 
+	regex := regexp.MustCompile(`.*\(actual path: (.*)\)`)
+
 	for _, line := range strings.Split(out, "\n") {
 		parts := strings.SplitN(line, ": ", 2)
 		if len(parts) != 2 {
@@ -127,7 +130,13 @@ func diskInfo(image string) (DiskInfo, error) {
 		case "disk size":
 			info.DiskSize = parts[1]
 		case "backing file":
-			info.BackingFile = parts[1]
+			// In come cases, `qemu-img info` includes the actual absolute path for
+			// the backing image. We want to use that, if present.
+			if match := regex.FindStringSubmatch(parts[1]); match != nil {
+				info.BackingFile = match[1]
+			} else {
+				info.BackingFile = parts[1]
+			}
 		}
 	}
 
@@ -219,9 +228,9 @@ func diskInject(dst, partition string, pairs map[string]string, options []string
 		// check desired partition exists
 		_, err = os.Stat(path)
 		if err != nil {
-			return fmt.Errorf("desired partition %s not found", partition)
+			return fmt.Errorf("desired partition %s not found in image %s", partition, dst)
 		} else {
-			log.Info("desired partition %s found", partition)
+			log.Info("desired partition %s found in image %s", partition, dst)
 		}
 	}
 

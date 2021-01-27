@@ -16,6 +16,7 @@ type Node struct {
 	HardwareF   *Hardware         `json:"hardware" yaml:"hardware" structs:"hardware" mapstructure:"hardware"`
 	NetworkF    *Network          `json:"network" yaml:"network" structs:"network" mapstructure:"network"`
 	InjectionsF []*Injection      `json:"injections" yaml:"injections" structs:"injections" mapstructure:"injections"`
+	AdvancedF   map[string]string `json:"advanced" yaml:"advanced" structs:"advanced" mapstructure:"advanced"`
 }
 
 func (this Node) Labels() map[string]string {
@@ -46,6 +47,10 @@ func (this Node) Injections() []ifaces.NodeInjection {
 	}
 
 	return injects
+}
+
+func (this Node) Advanced() map[string]string {
+	return this.AdvancedF
 }
 
 func (this *Node) AddInject(src, dst, perms, desc string) {
@@ -80,6 +85,18 @@ func (this *Node) SetInjections(injections []ifaces.NodeInjection) {
 	}
 
 	this.InjectionsF = injects
+}
+
+func (this *Node) SetAdvanced(adv map[string]string) {
+	this.AdvancedF = adv
+}
+
+func (this *Node) AddAdvanced(config, value string) {
+	if this.AdvancedF == nil {
+		this.AdvancedF = make(map[string]string)
+	}
+
+	this.AdvancedF[config] = value
 }
 
 type General struct {
@@ -237,6 +254,10 @@ func (this *Node) SetDefaults() {
 		this.HardwareF.OSTypeF = "linux"
 	}
 
+	if this.AdvancedF == nil {
+		this.AdvancedF = make(map[string]string)
+	}
+
 	this.NetworkF.SetDefaults()
 }
 
@@ -288,7 +309,9 @@ func (this Hardware) DiskConfig(snapshot string) string {
 			config = append(config, d.IfaceF)
 		}
 
-		if d.CacheModeF != "" {
+		if d.CacheModeF == "" {
+			config = append(config, "writeback")
+		} else {
 			config = append(config, d.CacheModeF)
 		}
 

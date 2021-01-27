@@ -213,6 +213,12 @@ type KvmVM struct {
 
 	vncShim net.Listener // shim for VNC connections
 	VNCPort int
+
+	// Channel to track virtual serial port open status per async QMP events
+	// received over the `qmp.Conn` above. Will push `true` into the channel if
+	// the virtual serial port was opened client-side, and `false` if it was
+	// closed client-side. Used to handle miniccc restarts in the client.
+	vSerPortOpenEvent chan bool
 }
 
 // Ensure that KvmVM implements the VM interface
@@ -241,6 +247,7 @@ func NewKVM(name, namespace string, config VMConfig) (*KvmVM, error) {
 	vm.KVMConfig = config.KVMConfig.Copy() // deep-copy configured fields
 
 	vm.hotplug = make(map[int]vmHotplug)
+	vm.vSerPortOpenEvent = make(chan bool)
 
 	return vm, nil
 }
@@ -262,6 +269,8 @@ func (vm *KvmVM) Copy() VM {
 	for k, v := range vm.hotplug {
 		vm2.hotplug[k] = v
 	}
+
+	vm2.vSerPortOpenEvent = make(chan bool)
 
 	return vm2
 }
@@ -632,6 +641,51 @@ func (vm *KvmVM) connectVNC() error {
 	return nil
 }
 
+// createTapName will return a generated tap name from the specified bridge
+func (vm *KvmVM) createTapName(bridge string) (string, error) {
+	br, err := getBridge(bridge)
+	if err != nil {
+		return "", vm.setErrorf("unable to get bridge %v: %v", bridge, err)
+	}
+	return br.CreateTapName(), nil
+}
+
+// addTap does the work of adding the specified tap associated with a network
+func (vm *KvmVM) addTap(name, bridge, mac string, vlan int) (string, error) {
+	br, err := getBridge(bridge)
+	if err != nil {
+		return name, vm.setErrorf("unable to get bridge %v: %v", bridge, err)
+	}
+	return br.CreateTap(name, mac, vlan)
+}
+
+// createTaps does the work of adding any taps if we are associated with
+// any networks
+func (vm *KvmVM) createTaps() error {
+	for i := range vm.Networks {
+		nic := &vm.Networks[i]
+		if nic.Tap != "" {
+			// tap has already been created, don't need to do again
+			continue
+		}
+
+		tap, err := vm.addTap("", nic.Bridge, nic.MAC, nic.VLAN)
+		if err != nil {
+			return vm.setErrorf("unable to create tap %v: %v", i, err)
+		}
+
+		nic.Tap = tap
+	}
+
+	if len(vm.Networks) > 0 {
+		if err := vm.writeTaps(); err != nil {
+			return vm.setErrorf("unable to write taps: %v", err)
+		}
+	}
+
+	return nil
+}
+
 // launch is the low-level launch function for KVM VMs. The caller should hold
 // the VM's lock.
 func (vm *KvmVM) launch() error {
@@ -664,31 +718,8 @@ func (vm *KvmVM) launch() error {
 
 	mustWrite(vm.path("name"), vm.Name)
 
-	// create and add taps if we are associated with any networks
-	for i := range vm.Networks {
-		nic := &vm.Networks[i]
-		if nic.Tap != "" {
-			// tap has already been created, don't need to do again
-			continue
-		}
-
-		br, err := getBridge(nic.Bridge)
-		if err != nil {
-			return vm.setErrorf("unable to get bridge %v: %v", nic.Bridge, err)
-		}
-
-		tap, err := br.CreateTap(nic.MAC, nic.VLAN)
-		if err != nil {
-			return vm.setErrorf("unable to create tap %v: %v", i, err)
-		}
-
-		nic.Tap = tap
-	}
-
-	if len(vm.Networks) > 0 {
-		if err := vm.writeTaps(); err != nil {
-			return vm.setErrorf("unable to write taps: %v", err)
-		}
+	if err := vm.createTaps(); err != nil {
+		return err
 	}
 
 	var sOut bytes.Buffer
@@ -755,7 +786,7 @@ func (vm *KvmVM) launch() error {
 		return vm.setErrorf("unable to connect to qmp socket: %v", err)
 	}
 
-	go qmpLogger(vm.ID, vm.q)
+	go vm.qmpLogger()
 
 	if err := vm.connectVNC(); err != nil {
 		// Failed to connect to vnc so clean up the process
@@ -790,7 +821,20 @@ func (vm *KvmVM) Connect(cc *ron.Server, reconnect bool) error {
 		cc.RegisterVM(vm)
 	}
 
-	return cc.DialSerial(vm.path("cc"))
+	ccPortOpened := make(chan struct{})
+	ccPortClosed := make(chan struct{})
+
+	go func() {
+		for open := range vm.vSerPortOpenEvent {
+			if open {
+				ccPortOpened <- struct{}{}
+			} else {
+				ccPortClosed <- struct{}{}
+			}
+		}
+	}()
+
+	return cc.DialSerial(vm.path("cc"), ccPortOpened, ccPortClosed)
 }
 
 func (vm *KvmVM) Disconnect(cc *ron.Server) error {
@@ -799,6 +843,41 @@ func (vm *KvmVM) Disconnect(cc *ron.Server) error {
 	}
 
 	cc.UnregisterVM(vm)
+
+	return nil
+}
+
+func (vm *KvmVM) AddNIC(nic NetConfig) error {
+	vm.lock.Lock()
+	defer vm.lock.Unlock()
+
+	if nic.MAC == "" {
+		nic.MAC = randomMac()
+	}
+	var err error
+	nic.Tap, err = vm.createTapName(nic.Bridge)
+	vm.Networks = append(vm.Networks, nic)
+
+	if _, err := vm.addTap(nic.Tap, nic.Bridge, nic.MAC, nic.VLAN); err != nil {
+		return vm.setErrorf("Unable to add tap %v: %v", nic.Tap, err)
+	}
+
+	if err := vm.writeTaps(); err != nil {
+		return vm.setErrorf("unable to write taps: %v", err)
+	}
+
+	// TODO: figure out a better naming convention for these
+	r, err := vm.q.NetDevAdd("tap", nic.Tap, nic.Tap)
+	if err != nil {
+		return err
+	}
+	log.Debugln("qmp netdev_add response:", r)
+
+	r, err = vm.q.NicAdd(nic.Tap, nic.Tap, "pci.0", nic.Driver, nic.MAC)
+	if err != nil {
+		return err
+	}
+	log.Debugln("qmp device_add response:", r)
 
 	return nil
 }
@@ -1257,9 +1336,53 @@ func (c QemuOverrides) WriteConfig(w io.Writer) error {
 }
 
 // log any asynchronous messages, such as vnc connects, to log.Info
-func qmpLogger(id int, q qmp.Conn) {
-	for v := q.Message(); v != nil; v = q.Message() {
-		log.Info("VM %v received asynchronous message: %v", id, v)
+func (vm KvmVM) qmpLogger() {
+	for v := vm.q.Message(); v != nil; v = vm.q.Message() {
+		log.Info("VM %v received asynchronous message: %v", vm.ID, v)
+
+		// Push to `vSerPortOpenEvent` channel if this is a VSERPORT_CHANGE event
+		// (example event below).
+		/*
+			map[string]interface{} {
+				"data": map[string]interface{} {
+					"id": "charvserialCC", "open": false
+				},
+				"event": "VSERPORT_CHANGE",
+				"timestamp": map[string]interface{} {
+					"microseconds":452889,
+					"seconds":1.608260782e+09
+				}
+			}
+		*/
+
+		event, ok := v["event"].(string)
+		if !ok {
+			continue
+		}
+
+		if event == "VSERPORT_CHANGE" {
+			data, ok := v["data"].(map[string]interface{})
+			if !ok {
+				continue
+			}
+
+			id, ok := data["id"].(string)
+			if !ok {
+				continue
+			}
+
+			// We only care about the serial port used for CC.
+			if id != "charvserialCC" {
+				continue
+			}
+
+			open, ok := data["open"].(bool)
+			if !ok {
+				continue
+			}
+
+			vm.vSerPortOpenEvent <- open
+		}
 	}
 }
 

@@ -1,0 +1,5 @@
+#!/bin/bash
+
+if command -v systemctl &> /dev/null ; then
+  systemctl daemon-reload &> /dev/null
+fi

@@ -1,6 +1,6 @@
-// Copyright (2016) Sandia Corporation.
-// Under the terms of Contract DE-AC04-94AL85000 with Sandia Corporation,
-// the U.S. Government retains certain rights in this software.
+// Copyright 2016-2021 National Technology & Engineering Solutions of Sandia, LLC (NTESS).
+// Under the terms of Contract DE-NA0003525 with NTESS, the U.S. Government retains certain
+// rights in this software.
 
 package bridge
 
@@ -9,9 +9,15 @@ import (
 	log "minilog"
 )
 
+// CreateTapName will return the next created tap name from the name channel
+func (b *Bridge) CreateTapName() string {
+	return <-b.nameChan
+}
+
 // CreateTap creates a new tap and adds it to the bridge. mac is the MAC
 // address to assign to the interface. vlan is the VLAN for the traffic.
-func (b *Bridge) CreateTap(mac string, vlan int) (string, error) {
+// If a name is not provided, one will be automatically generated
+func (b *Bridge) CreateTap(tap, mac string, vlan int) (string, error) {
 	bridgeLock.Lock()
 	defer bridgeLock.Unlock()
 
@@ -21,7 +27,9 @@ func (b *Bridge) CreateTap(mac string, vlan int) (string, error) {
 	// faster than the periodic tap reaper
 	b.reapTaps()
 
-	tap := <-b.nameChan
+	if tap == "" {
+		tap = <-b.nameChan
+	}
 
 	var created bool
 

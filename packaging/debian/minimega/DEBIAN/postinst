@@ -1,13 +1,15 @@
-#! /bin/sh
+#!/bin/bash -e
 
-set -e
-
-if ! id -u minimega >/dev/null 2>&1; then
-    echo "Adding minimega user."
-    useradd --system --no-create-home --home-dir /run/minimega minimega
-else
-    echo "minimega user already exists."
+if command -v systemctl &> /dev/null ; then
+  systemctl daemon-reload &> /dev/null
 fi
 
-chown -R minimega:minimega /usr/share/doc/minimega
-chown -R minimega:minimega /opt/minimega
+if ! getent group minimega &> /dev/null ; then
+    echo "Adding minimega group."
+    groupadd --system minimega
+else
+    echo "minimega group already exists."
+fi
+
+chgrp -R minimega /usr/share/doc/minimega
+chgrp -R minimega /opt/minimega
