@@ -7,7 +7,7 @@ service NetworkManager stop
 if command -v 'ip' &>/dev/null; then
     {{ range $idx, $iface := .Network.Interfaces }}
         {{ if ne $iface.Proto "dhcp" }}
-    dev=$(ip -oneline -4 link show | grep -iv 'LOOPBACK' | awk 'NR==${idx + 1} {split($2, devname, ":"); print devname[1]}')
+    dev=$(ip -oneline -4 link show | grep -iv 'LOOPBACK' | awk 'NR=={{ addInt $idx 1 }} {split($2, devname, ":"); print devname[1]}')
     ip link set dev "$dev" down
     ip addr flush dev "$dev"
     ip addr add {{ $iface.Address }}/{{ $iface.Mask }} dev "$dev"
@@ -21,9 +21,9 @@ else
     # Fallback to ifconfig
     {{ range $idx, $iface := .Network.Interfaces }}
         {{ if ne $iface.Proto "dhcp" }}
-    dev=$(ifconfig -s -a | grep -ivE '^lo|Iface' | awk 'NR==${idx + 1} { print $1 }')
+    dev=$(ifconfig -s -a | grep -ivE '^lo|Iface' | awk 'NR=={{ addInt $idx 1 }} { print $1 }')
     ifconfig "$dev" down
-    ifconfig "$dev" {{ $iface.Address }} netmask {{ $iface.Mask }}
+    ifconfig "$dev" {{ $iface.Address }} netmask {{ cidrToMask (print $iface.Address "/" $iface.Mask) }}
     ifconfig "$dev" up
             {{ if ne $iface.Gateway "" }}
     route add default gw {{ $iface.Gateway }} dev "$dev"
