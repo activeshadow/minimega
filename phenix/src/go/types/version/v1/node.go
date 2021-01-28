@@ -336,6 +336,10 @@ func (this *Node) SetDefaults() {
 		this.AdvancedF = make(map[string]string)
 	}
 
+	if this.OverridesF == nil {
+		this.OverridesF = make(map[string]string)
+	}
+
 	this.NetworkF.SetDefaults()
 }
 
