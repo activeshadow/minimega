@@ -38,8 +38,8 @@ COPY --from=gobuilder /minimega/bin/protonuke.exe /opt/minimega/bin/protonuke.ex
 
 COPY ./misc/web /opt/minimega/misc/web
 
-ADD docker/minimega/minimega.service /etc/systemd/system/minimega.service
-ADD docker/minimega/miniweb.service  /etc/systemd/system/miniweb.service
+ADD docker/minimega.service /etc/systemd/system/minimega.service
+ADD docker/miniweb.service  /etc/systemd/system/miniweb.service
 
 WORKDIR /etc/systemd/system/multi-user.target.wants
 
