@@ -107,11 +107,12 @@ router takes a number of subcommands:
 
     router foo rid 1.1.1.1
 
-- 'fw': specify flows to allow via iptables. For example, to allow HTTP traffic
-  from any IP address to host 192.168.0.5 on the interface at index 0 (which is on
-  the 192.168.0.0/24 network):
+- 'fw': specify flows to accept/drop/reject via iptables. For example, to accept
+	HTTP traffic from any IP address to host 192.168.0.5 on the interface at index 0
+	(which is on the 192.168.0.0/24 network):
 
-	  fw allow out 0 192.168.0.5:80 tcp
+		fw default drop
+	  fw accept out 0 192.168.0.5:80 tcp
 
 	Note that we use 'out' here since we're applying the rule to the interface
 	that's on the same network as the destination. The source and destination does
@@ -139,8 +140,9 @@ router takes a number of subcommands:
 			"router <vm> <route,> <bgp,> <processname> <rrclient,>",
 			"router <vm> <route,> <bgp,> <processname> <export,> <all,filter> <filtername>",
 			//"router <vm> <importbird,> <configfilepath>", TODO
-			"router <vm> <fw,> <allow,> <in,out> <index> <dst> <proto>",
-			"router <vm> <fw,> <allow,> <in,out> <index> <src> <dst> <proto>",
+			"router <vm> <fw,> <default,> <accept,drop,reject>",
+			"router <vm> <fw,> <accept,drop,reject> <in,out> <index> <dst> <proto>",
+			"router <vm> <fw,> <accept,drop,reject> <in,out> <index> <src> <dst> <proto>",
 		},
 		Call:    wrapVMTargetCLI(cliRouter),
 		Suggest: wrapVMSuggest(VM_ANY_STATE, false),
@@ -311,7 +313,19 @@ func cliRouter(ns *Namespace, c *minicli.Command, resp *minicli.Response) error 
 		}
 		rtr.routerID = c.StringArgs["id"]
 	} else if c.BoolArgs["fw"] {
-		if c.BoolArgs["allow"] {
+		if c.BoolArgs["default"] {
+			if c.BoolArgs["accept"] {
+				return rtr.FirewallDefault("accept")
+			} else if c.BoolArgs["drop"] {
+				return rtr.FirewallDefault("drop")
+			} else if c.BoolArgs["reject"] {
+				return rtr.FirewallDefault("reject")
+			}
+
+			return fmt.Errorf("unexpected default firewall action")
+		}
+
+		if c.BoolArgs["accept"] || c.BoolArgs["drop"] || c.BoolArgs["reject"] {
 			idx, err := strconv.Atoi(c.StringArgs["index"])
 			if err != nil {
 				return fmt.Errorf("converting fw interface index: %v", err)
@@ -352,7 +366,17 @@ func cliRouter(ns *Namespace, c *minicli.Command, resp *minicli.Response) error 
 				}
 			}
 
-			return rtr.FirewallAdd(idx, in, src, dst, proto)
+			var action string
+
+			if c.BoolArgs["accept"] {
+				action = "accept"
+			} else if c.BoolArgs["drop"] {
+				action = "drop"
+			} else if c.BoolArgs["reject"] {
+				action = "reject"
+			}
+
+			return rtr.FirewallAdd(idx, in, src, dst, proto, action)
 		}
 	}
 

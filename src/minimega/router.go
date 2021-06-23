@@ -8,15 +8,16 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	log "minilog"
 	"net"
 	"os"
 	"path/filepath"
-	"ron"
 	"sort"
 	"strconv"
 	"strings"
 	"text/tabwriter"
+
+	log "minilog"
+	"ron"
 )
 
 type Router struct {
@@ -36,7 +37,7 @@ type Router struct {
 	bgpRoutes    map[string]*bgp
 	routerID     string
 	FWs          [][]fw // postitional firewall rule (index 0 is the first listed network in vm config net)
-	updateFWs    bool // only update firewall rules if we've made changes
+	FWDefault    string
 }
 
 type ospf struct {
@@ -65,10 +66,11 @@ type bgp struct {
 }
 
 type fw struct {
-	in    bool // if true then in, if false then out
-	src   string
-	dst   string
-	proto string
+	in     bool // if true then in, if false then out
+	src    string
+	dst    string
+	proto  string
+	action string
 }
 
 // NewRouter creates a new router with a given number of interfaces,
@@ -351,28 +353,35 @@ func (r *Router) writeConfig(w io.Writer) error {
 	fmt.Fprintf(w, "bird routerid %v\n", r.routerID)
 	fmt.Fprintf(w, "bird commit\n")
 
-	// only write firweall changes if it's changed from the last commit
-	if r.updateFWs {
-		fmt.Fprintf(w, "fw flush\n") // no need to manage state - just start over
+	fmt.Fprintf(w, "fw flush\n") // no need to manage firewall state - just start over
 
-		for i, fws := range r.FWs {
-			for _, fw := range fws {
-				cmd := "fw allow"
+	if r.FWDefault == "" {
+		if len(r.FWs) == 0 {
+			fmt.Fprintln(w, "fw default accept")
+		} else {
+			fmt.Fprintln(w, "fw default drop")
+		}
+	} else {
+		fmt.Fprintf(w, "fw default %s", r.FWDefault)
+	}
 
-				if fw.in {
-					cmd = fmt.Sprintf("%s in %d", cmd, i)
-				} else {
-					cmd = fmt.Sprintf("%s out %d", cmd, i)
-				}
+	for i, fws := range r.FWs {
+		for _, fw := range fws {
+			cmd := fmt.Sprintf("fw %s", fw.action)
 
-				if fw.src != "" {
-					cmd = fmt.Sprintf("%s %s", cmd, fw.src)
-				}
-
-				cmd = fmt.Sprintf("%s %s %s", cmd, fw.dst, fw.proto)
-
-				fmt.Fprintln(w, cmd)
+			if fw.in {
+				cmd = fmt.Sprintf("%s in %d", cmd, i)
+			} else {
+				cmd = fmt.Sprintf("%s out %d", cmd, i)
 			}
+
+			if fw.src != "" {
+				cmd = fmt.Sprintf("%s %s", cmd, fw.src)
+			}
+
+			cmd = fmt.Sprintf("%s %s %s", cmd, fw.dst, fw.proto)
+
+			fmt.Fprintln(w, cmd)
 		}
 	}
 
@@ -405,7 +414,6 @@ func (r *Router) Commit(ns *Namespace) error {
 
 	f.Sync()
 	r.updateIPs = false // IPs are no longer stale
-	r.updateFWs = false // FWs are no longer stale
 
 	// remove any previous commands
 	prefix := fmt.Sprintf("minirouter-%v", r.vm.GetName())
@@ -981,18 +989,24 @@ func (r *Router) RouteBGPDel(processname string, local, clearall bool) error {
 	return nil
 }
 
+func (r *Router) FirewallDefault(d string) error {
+	log.Debug("RouterFirewallDefault: %s", d)
+
+	r.FWDefault = d
+
+	return nil
+}
+
 // Adds an iptables rule for the specified interface.
-func (r *Router) FirewallAdd(n int, in bool, src, dst, proto string) error {
-	log.Debug("RouterFirewallAdd: %d, %b, %s, %s, %s", n, in, src, dst, proto)
+func (r *Router) FirewallAdd(n int, in bool, src, dst, proto, action string) error {
+	log.Debug("RouterFirewallAdd: %d, %b, %s, %s, %s, %s", n, in, src, dst, proto, action)
 
 	if n >= len(r.IPs) {
 		return fmt.Errorf("no such network index: %v", n)
 	}
 
-	f := fw{in: in, src: src, dst: dst, proto: proto}
-
+	f := fw{in: in, src: src, dst: dst, proto: proto, action: action}
 	r.FWs[n] = append(r.FWs[n], f)
-	r.updateFWs = true
 
 	return nil
 }
@@ -1001,9 +1015,7 @@ func (r *Router) FirewallFlush() error {
 	log.Debug("RouterFirewallFlush")
 
 	i := len(r.FWs)
-
 	r.FWs = make([][]fw, i)
-	r.updateFWs = true
 
 	return nil
 }

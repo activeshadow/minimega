@@ -13,8 +13,9 @@ import (
 func init() {
 	minicli.Register(&minicli.Handler{
 		Patterns: []string{
-			"fw <allow,> <in,out> <index> <dst> <proto>",
-			"fw <allow,> <in,out> <index> <src> <dst> <proto>",
+			"fw <default,> <accept,drop,reject>",
+			"fw <accept,drop,reject> <in,out> <index> <dst> <proto>",
+			"fw <accept,drop,reject> <in,out> <index> <src> <dst> <proto>",
 			"fw <flush,>",
 		},
 		Call: handleFW,
@@ -36,7 +37,28 @@ func handleFW(c *minicli.Command, r chan<- minicli.Responses) {
 		return
 	}
 
-	if c.BoolArgs["allow"] {
+	if c.BoolArgs["default"] {
+		if c.BoolArgs["accept"] {
+			if out, err := exec.Command("iptables", "-P", "FORWARD", "ACCEPT").CombinedOutput(); err != nil {
+				log.Errorln("defaulting FORWARD to ACCEPT %v: %v", err, string(out))
+				return
+			}
+		} else if c.BoolArgs["drop"] {
+			if out, err := exec.Command("iptables", "-P", "FORWARD", "DROP").CombinedOutput(); err != nil {
+				log.Errorln("defaulting FORWARD to DROP %v: %v", err, string(out))
+				return
+			}
+		} else if c.BoolArgs["reject"] {
+			if out, err := exec.Command("iptables", "-P", "FORWARD", "REJECT").CombinedOutput(); err != nil {
+				log.Errorln("defaulting FORWARD to REJECT %v: %v", err, string(out))
+				return
+			}
+		}
+
+		return
+	}
+
+	if c.BoolArgs["accept"] || c.BoolArgs["drop"] || c.BoolArgs["reject"] {
 		var (
 			idx   = -1
 			iface = "lo"
@@ -119,15 +141,17 @@ func handleFW(c *minicli.Command, r chan<- minicli.Responses) {
 			}
 		}
 
-		rule = append(rule, "-j", "ACCEPT")
+		if c.BoolArgs["accept"] {
+			rule = append(rule, "-j", "ACCEPT")
+		} else if c.BoolArgs["drop"] {
+			rule = append(rule, "-j", "DROP")
+		} else if c.BoolArgs["reject"] {
+			rule = append(rule, "-j", "REJECT")
+		}
 
 		if err := addRule(rule); err != nil {
 			log.Errorln(err)
 			return
-		}
-
-		if err := defaultForwardDrop(); err != nil {
-			log.Errorln(err)
 		}
 	}
 }
@@ -200,14 +224,6 @@ func createEstablishedChain() error {
 
 	if out, err := exec.Command("iptables", "-A", "FORWARD", "-j", "ESTABLISHED").CombinedOutput(); err != nil {
 		return fmt.Errorf("creating custom ESTABLISHED chain %v: %v", err, string(out))
-	}
-
-	return nil
-}
-
-func defaultForwardDrop() error {
-	if out, err := exec.Command("iptables", "-P", "FORWARD", "DROP").CombinedOutput(); err != nil {
-		return fmt.Errorf("defaulting FORWARD to DROP %v: %v", err, string(out))
 	}
 
 	return nil
