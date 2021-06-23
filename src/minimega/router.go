@@ -35,6 +35,8 @@ type Router struct {
 	ospfRoutes   map[string]*ospf
 	bgpRoutes    map[string]*bgp
 	routerID     string
+	FWs          [][]fw // postitional firewall rule (index 0 is the first listed network in vm config net)
+	updateFWs    bool // only update firewall rules if we've made changes
 }
 
 type ospf struct {
@@ -62,6 +64,13 @@ type bgp struct {
 	exportNetworks map[string]bool
 }
 
+type fw struct {
+	in    bool // if true then in, if false then out
+	src   string
+	dst   string
+	proto string
+}
+
 // NewRouter creates a new router with a given number of interfaces,
 // initializing all the maps and setting sane defaults.
 func NewRouter(i int) *Router {
@@ -77,6 +86,7 @@ func NewRouter(i int) *Router {
 		ospfRoutes:   make(map[string]*ospf),
 		bgpRoutes:    make(map[string]*bgp),
 		routerID:     "0.0.0.0",
+		FWs:          make([][]fw, i),
 	}
 	return r
 }
@@ -341,6 +351,31 @@ func (r *Router) writeConfig(w io.Writer) error {
 	fmt.Fprintf(w, "bird routerid %v\n", r.routerID)
 	fmt.Fprintf(w, "bird commit\n")
 
+	// only write firweall changes if it's changed from the last commit
+	if r.updateFWs {
+		fmt.Fprintf(w, "fw flush\n") // no need to manage state - just start over
+
+		for i, fws := range r.FWs {
+			for _, fw := range fws {
+				cmd := "fw allow"
+
+				if fw.in {
+					cmd = fmt.Sprintf("%s in %d", cmd, i)
+				} else {
+					cmd = fmt.Sprintf("%s out %d", cmd, i)
+				}
+
+				if fw.src != "" {
+					cmd = fmt.Sprintf("%s %s", cmd, fw.src)
+				}
+
+				cmd = fmt.Sprintf("%s %s %s", cmd, fw.dst, fw.proto)
+
+				fmt.Fprintln(w, cmd)
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -370,6 +405,7 @@ func (r *Router) Commit(ns *Namespace) error {
 
 	f.Sync()
 	r.updateIPs = false // IPs are no longer stale
+	r.updateFWs = false // FWs are no longer stale
 
 	// remove any previous commands
 	prefix := fmt.Sprintf("minirouter-%v", r.vm.GetName())
@@ -942,6 +978,33 @@ func (r *Router) RouteBGPDel(processname string, local, clearall bool) error {
 		}
 	}
 	delete(r.bgpRoutes, processname)
+	return nil
+}
+
+// Adds an iptables rule for the specified interface.
+func (r *Router) FirewallAdd(n int, in bool, src, dst, proto string) error {
+	log.Debug("RouterFirewallAdd: %d, %b, %s, %s, %s", n, in, src, dst, proto)
+
+	if n >= len(r.IPs) {
+		return fmt.Errorf("no such network index: %v", n)
+	}
+
+	f := fw{in: in, src: src, dst: dst, proto: proto}
+
+	r.FWs[n] = append(r.FWs[n], f)
+	r.updateFWs = true
+
+	return nil
+}
+
+func (r *Router) FirewallFlush() error {
+	log.Debug("RouterFirewallFlush")
+
+	i := len(r.FWs)
+
+	r.FWs = make([][]fw, i)
+	r.updateFWs = true
+
 	return nil
 }
 

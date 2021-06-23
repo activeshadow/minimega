@@ -38,9 +38,9 @@ func handleFW(c *minicli.Command, r chan<- minicli.Responses) {
 
 	if c.BoolArgs["allow"] {
 		var (
-			idx = -1
+			idx   = -1
 			iface = "lo"
-			err error
+			err   error
 		)
 
 		if c.StringArgs["index"] != "lo" {
@@ -52,8 +52,6 @@ func handleFW(c *minicli.Command, r chan<- minicli.Responses) {
 		}
 
 		if idx != -1 {
-			var err error
-
 			// get interface name using the index
 			if iface, err = findEth(idx); err != nil {
 				log.Errorln("getting interface name for index: %v", err)

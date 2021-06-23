@@ -6,9 +6,11 @@ package main
 
 import (
 	"fmt"
-	"minicli"
 	"net"
 	"strconv"
+	"strings"
+
+	"minicli"
 )
 
 var routerCLIHandlers = []minicli.Handler{
@@ -104,6 +106,16 @@ router takes a number of subcommands:
   across the orginizations network and is used for various routing protocols ie OSPF
 
     router foo rid 1.1.1.1
+
+- 'fw': specify flows to allow via iptables. For example, to allow HTTP traffic
+  from any IP address to host 192.168.0.5 on the interface at index 0 (which is on
+  the 192.168.0.0/24 network):
+
+	  fw allow out 0 192.168.0.5:80 tcp
+
+	Note that we use 'out' here since we're applying the rule to the interface
+	that's on the same network as the destination. The source and destination does
+	not have to include a port.
 `,
 		Patterns: []string{
 			"router <vm>",
@@ -127,6 +139,8 @@ router takes a number of subcommands:
 			"router <vm> <route,> <bgp,> <processname> <rrclient,>",
 			"router <vm> <route,> <bgp,> <processname> <export,> <all,filter> <filtername>",
 			//"router <vm> <importbird,> <configfilepath>", TODO
+			"router <vm> <fw,> <allow,> <in,out> <index> <dst> <proto>",
+			"router <vm> <fw,> <allow,> <in,out> <index> <src> <dst> <proto>",
 		},
 		Call:    wrapVMTargetCLI(cliRouter),
 		Suggest: wrapVMSuggest(VM_ANY_STATE, false),
@@ -164,6 +178,7 @@ router takes a number of subcommands:
 			"clear router <vm> <route,> <bgp,> <processname>",
 			"clear router <vm> <route,> <bgp,> <processname> <rrclient,>",
 			"clear router <vm> <route,> <bgp,> <processname> <local,neighbor>",
+			"clear router <vm> <fw,>",
 		},
 		Call:    wrapVMTargetCLI(cliClearRouter),
 		Suggest: wrapVMSuggest(VM_ANY_STATE, false),
@@ -295,6 +310,50 @@ func cliRouter(ns *Namespace, c *minicli.Command, resp *minicli.Response) error 
 			return fmt.Errorf("invalid routerid: %v", c.StringArgs["id"])
 		}
 		rtr.routerID = c.StringArgs["id"]
+	} else if c.BoolArgs["fw"] {
+		if c.BoolArgs["allow"] {
+			idx, err := strconv.Atoi(c.StringArgs["index"])
+			if err != nil {
+				return fmt.Errorf("converting fw interface index: %v", err)
+			}
+
+			var (
+				in    = c.BoolArgs["in"]
+				proto = c.StringArgs["proto"]
+				src   string
+				dst   string
+			)
+
+			if src = c.StringArgs["src"]; src != "" {
+				fields := strings.Split(src, ":")
+
+				switch len(fields) {
+				case 1: // all good here
+				case 2:
+					if _, err = strconv.Atoi(fields[1]); err != nil {
+						return fmt.Errorf("validating fw source port %s: %v", fields[1], err)
+					}
+				default:
+					return fmt.Errorf("malformed fw source %s", src)
+				}
+			}
+
+			if dst = c.StringArgs["dst"]; dst != "" {
+				fields := strings.Split(dst, ":")
+
+				switch len(fields) {
+				case 1: // all good here
+				case 2:
+					if _, err = strconv.Atoi(fields[1]); err != nil {
+						return fmt.Errorf("validating fw destination port %s: %v", fields[1], err)
+					}
+				default:
+					return fmt.Errorf("malformed fw destination %s", dst)
+				}
+			}
+
+			return rtr.FirewallAdd(idx, in, src, dst, proto)
+		}
 	}
 
 	return nil
@@ -424,6 +483,8 @@ func cliClearRouter(ns *Namespace, c *minicli.Command, resp *minicli.Response) e
 	} else if c.BoolArgs["rid"] {
 		rtr.routerID = "0.0.0.0"
 		return nil
+	} else if c.BoolArgs["fw"] {
+		return rtr.FirewallFlush()
 	} else {
 		// remove everything about this router
 		err := rtr.InterfaceDel("", "", true)
@@ -438,6 +499,7 @@ func cliClearRouter(ns *Namespace, c *minicli.Command, resp *minicli.Response) e
 		rtr.dhcp = make(map[string]*dhcp)
 		rtr.RouteBGPDel("", false, true)
 		rtr.routerID = "0.0.0.0"
+		rtr.FirewallFlush()
 	}
 	return nil
 }
