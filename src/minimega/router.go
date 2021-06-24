@@ -98,7 +98,12 @@ func NewRouter(i int) *Router {
 		ospfRoutes:   make(map[string]*ospf),
 		bgpRoutes:    make(map[string]*bgp),
 		routerID:     "0.0.0.0",
-		FW:           &fw{rules: make([][]*fwRule, i), chains: make(map[string]*fwChain)},
+
+		FW: &fw{
+			defaultAction: "accept",
+			rules:         make([][]*fwRule, i),
+			chains:        make(map[string]*fwChain),
+		},
 	}
 	return r
 }
@@ -366,16 +371,7 @@ func (r *Router) writeConfig(w io.Writer) error {
 	// ***** firewall stuff ***** //
 
 	fmt.Fprintln(w, "fw flush") // no need to manage firewall state - just start over
-
-	if r.FW.defaultAction == "" {
-		if len(r.FW.rules) == 0 {
-			fmt.Fprintln(w, "fw default accept")
-		} else {
-			fmt.Fprintln(w, "fw default drop")
-		}
-	} else {
-		fmt.Fprintf(w, "fw default %s\n", r.FW.defaultAction)
-	}
+	fmt.Fprintf(w, "fw default %s\n", r.FW.defaultAction)
 
 	for name, chain := range r.FW.chains {
 		for _, rule := range chain.rules {
@@ -390,15 +386,7 @@ func (r *Router) writeConfig(w io.Writer) error {
 			fmt.Fprintln(w, cmd)
 		}
 
-		if chain.defaultAction == "" {
-			if len(chain.rules) == 0 {
-				fmt.Fprintf(w, "fw chain %s default action accept\n", name)
-			} else {
-				fmt.Fprintf(w, "fw chain %s default action drop\n", name)
-			}
-		} else {
-			fmt.Fprintf(w, "fw chain %s default action %s\n", name, chain.defaultAction)
-		}
+		fmt.Fprintf(w, "fw chain %s default action %s\n", name, chain.defaultAction)
 	}
 
 	for i, rules := range r.FW.rules {
@@ -1076,7 +1064,7 @@ func (r *Router) FirewallChainAdd(chain, src, dst, proto, action string) error {
 
 	c, ok := r.FW.chains[chain]
 	if !ok {
-		c = new(fwChain)
+		c = &fwChain{defaultAction: "drop"}
 		r.FW.chains[chain] = c
 	}
 
@@ -1107,7 +1095,11 @@ func (r *Router) FirewallFlush() error {
 	log.Debug("RouterFirewallFlush")
 
 	i := len(r.FW.rules)
-	r.FW = &fw{rules: make([][]*fwRule, i), chains: make(map[string]*fwChain)}
+	r.FW = &fw{
+			defaultAction: "accept",
+			rules:         make([][]*fwRule, i),
+			chains:        make(map[string]*fwChain),
+		},
 
 	return nil
 }
