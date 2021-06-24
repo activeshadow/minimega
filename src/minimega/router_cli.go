@@ -143,6 +143,10 @@ router takes a number of subcommands:
 			"router <vm> <fw,> <default,> <accept,drop,reject>",
 			"router <vm> <fw,> <accept,drop,reject> <in,out> <index> <dst> <proto>",
 			"router <vm> <fw,> <accept,drop,reject> <in,out> <index> <src> <dst> <proto>",
+			"router <vm> <fw,> chain <chain> <default,> action <accept,drop,reject>",
+			"router <vm> <fw,> chain <chain> action <accept,drop,reject> <dst> <proto>",
+			"router <vm> <fw,> chain <chain> action <accept,drop,reject> <src> <dst> <proto>",
+			"router <vm> <fw,> chain <chain> apply <in,out> <index>",
 		},
 		Call:    wrapVMTargetCLI(cliRouter),
 		Suggest: wrapVMSuggest(VM_ANY_STATE, false),
@@ -313,6 +317,79 @@ func cliRouter(ns *Namespace, c *minicli.Command, resp *minicli.Response) error 
 		}
 		rtr.routerID = c.StringArgs["id"]
 	} else if c.BoolArgs["fw"] {
+		if chain := c.StringArgs["chain"]; chain != "" {
+			if c.BoolArgs["default"] {
+				if c.BoolArgs["accept"] {
+					return rtr.FirewallChainDefault(chain, "accept")
+				} else if c.BoolArgs["drop"] {
+					return rtr.FirewallChainDefault(chain, "drop")
+				} else if c.BoolArgs["reject"] {
+					return rtr.FirewallChainDefault(chain, "reject")
+				}
+
+				return fmt.Errorf("unexpected default fw chain action")
+			}
+
+			if c.BoolArgs["accept"] || c.BoolArgs["drop"] || c.BoolArgs["reject"] {
+				var src, dst string
+
+				if src = c.StringArgs["src"]; src != "" {
+					fields := strings.Split(src, ":")
+
+					switch len(fields) {
+					case 1: // all good here
+					case 2:
+						if _, err := strconv.Atoi(fields[1]); err != nil {
+							return fmt.Errorf("validating fw source port %s: %v", fields[1], err)
+						}
+					default:
+						return fmt.Errorf("malformed fw source %s", src)
+					}
+				}
+
+				if dst = c.StringArgs["dst"]; dst != "" {
+					fields := strings.Split(dst, ":")
+
+					switch len(fields) {
+					case 1: // all good here
+					case 2:
+						if _, err := strconv.Atoi(fields[1]); err != nil {
+							return fmt.Errorf("validating fw destination port %s: %v", fields[1], err)
+						}
+					default:
+						return fmt.Errorf("malformed fw destination %s", dst)
+					}
+				}
+
+				var (
+					proto  = c.StringArgs["proto"]
+					action string
+				)
+
+				if c.BoolArgs["accept"] {
+					action = "accept"
+				} else if c.BoolArgs["drop"] {
+					action = "drop"
+				} else if c.BoolArgs["reject"] {
+					action = "reject"
+				}
+
+				return rtr.FirewallChainAdd(chain, src, dst, proto, action)
+			}
+
+			if c.BoolArgs["in"] || c.BoolArgs["out"] {
+				idx, err := strconv.Atoi(c.StringArgs["index"])
+				if err != nil {
+					return fmt.Errorf("converting fw chain interface index: %v", err)
+				}
+
+				return rtr.FirewallChainApply(idx, c.BoolArgs["in"], chain)
+			}
+
+			// if we get here, it's an unexpected error...
+			return fmt.Errorf("error processing fw chain")
+		}
+
 		if c.BoolArgs["default"] {
 			if c.BoolArgs["accept"] {
 				return rtr.FirewallDefault("accept")
@@ -322,7 +399,7 @@ func cliRouter(ns *Namespace, c *minicli.Command, resp *minicli.Response) error 
 				return rtr.FirewallDefault("reject")
 			}
 
-			return fmt.Errorf("unexpected default firewall action")
+			return fmt.Errorf("unexpected default fw action")
 		}
 
 		if c.BoolArgs["accept"] || c.BoolArgs["drop"] || c.BoolArgs["reject"] {

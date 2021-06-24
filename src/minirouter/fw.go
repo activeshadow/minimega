@@ -16,10 +16,136 @@ func init() {
 			"fw <default,> <accept,drop,reject>",
 			"fw <accept,drop,reject> <in,out> <index> <dst> <proto>",
 			"fw <accept,drop,reject> <in,out> <index> <src> <dst> <proto>",
+			"fw chain <chain> <default,> action <accept,drop,reject>",
+			"fw chain <chain> action <accept,drop,reject> <dst> <proto>",
+			"fw chain <chain> action <accept,drop,reject> <src> <dst> <proto>",
+			"fw chain <chain> apply <in,out> <index>",
 			"fw <flush,>",
 		},
 		Call: handleFW,
 	})
+}
+
+func handleChain(c *minicli.Command, r chan<- minicli.Responses) error {
+	name := c.StringArgs["chain"]
+
+	if out, err := exec.Command("iptables", "-N", name).CombinedOutput(); err != nil {
+		if !strings.Contains(string(out), "exists") { // error isn't due to existing chain
+			return fmt.Errorf("creating %s chain %v: %v", name, err, string(out))
+		}
+	}
+
+	if c.BoolArgs["default"] {
+		if c.BoolArgs["accept"] {
+			if out, err := exec.Command("iptables", "-A", name, "-j", "ACCEPT").CombinedOutput(); err != nil {
+				return fmt.Errorf("defaulting %s chain to ACCEPT %v: %v", name, err, string(out))
+			}
+		} else if c.BoolArgs["drop"] {
+			if out, err := exec.Command("iptables", "-A", name, "-j", "DROP").CombinedOutput(); err != nil {
+				return fmt.Errorf("defaulting %s chain to DROP %v: %v", name, err, string(out))
+			}
+		} else if c.BoolArgs["reject"] {
+			if out, err := exec.Command("iptables", "-A", name, "-j", "REJECT").CombinedOutput(); err != nil {
+				return fmt.Errorf("defaulting %s chain to REJECT %v: %v", name, err, string(out))
+			}
+		}
+
+		return nil
+	}
+
+	if c.BoolArgs["accept"] || c.BoolArgs["drop"] || c.BoolArgs["reject"] {
+		rule := []string{name}
+
+		if proto := c.StringArgs["proto"]; proto != "" {
+			rule = append(rule, "-p", proto)
+		}
+
+		if src := c.StringArgs["src"]; src != "" {
+			fields := strings.Split(src, ":")
+
+			switch len(fields) {
+			case 1:
+				rule = append(rule, "-s", src)
+			case 2:
+				if _, err := strconv.Atoi(fields[1]); err != nil {
+					return fmt.Errorf("converting source port: %v", err)
+				}
+
+				if proto := c.StringArgs["proto"]; proto == "" {
+					return fmt.Errorf("must specify proto when specifying ports")
+				}
+
+				rule = append(rule, "-s", fields[0], "--sport", fields[1])
+			default:
+				return fmt.Errorf("malformed source")
+			}
+		}
+
+		if dst := c.StringArgs["dst"]; dst != "" {
+			fields := strings.Split(dst, ":")
+
+			switch len(fields) {
+			case 1:
+				rule = append(rule, "-d", dst)
+			case 2:
+				if _, err := strconv.Atoi(fields[1]); err != nil {
+					return fmt.Errorf("converting destination port: %v", err)
+				}
+
+				if proto := c.StringArgs["proto"]; proto == "" {
+					return fmt.Errorf("must specify proto when specifying ports")
+				}
+
+				rule = append(rule, "-d", fields[0], "--dport", fields[1])
+			default:
+				return fmt.Errorf("malformed destination")
+			}
+		}
+
+		if c.BoolArgs["accept"] {
+			rule = append(rule, "-j", "ACCEPT")
+		} else if c.BoolArgs["drop"] {
+			rule = append(rule, "-j", "DROP")
+		} else if c.BoolArgs["reject"] {
+			rule = append(rule, "-j", "REJECT")
+		}
+
+		return addRule(rule)
+	}
+
+	if c.BoolArgs["in"] || c.BoolArgs["out"] {
+		var (
+			idx   = -1
+			iface = "lo"
+			err   error
+		)
+
+		if c.StringArgs["index"] != "lo" {
+			idx, err = strconv.Atoi(c.StringArgs["index"])
+			if err != nil {
+				return fmt.Errorf("converting interface index: %v", err)
+			}
+		}
+
+		if idx != -1 {
+			// get interface name using the index
+			if iface, err = findEth(idx); err != nil {
+				return fmt.Errorf("getting interface name for index: %v", err)
+			}
+		}
+
+		var rule []string
+
+		if c.BoolArgs["in"] {
+			rule = []string{"FORWARD", "-i", iface, "-j", name}
+		} else {
+			rule = []string{"FORWARD", "-o", iface, "-j", name}
+		}
+
+		return addRule(rule)
+	}
+
+	return nil
 }
 
 func handleFW(c *minicli.Command, r chan<- minicli.Responses) {
@@ -31,6 +157,14 @@ func handleFW(c *minicli.Command, r chan<- minicli.Responses) {
 		log.Debug("flushing firwall")
 
 		if err := flushFW(); err != nil {
+			log.Errorln(err)
+		}
+
+		return
+	}
+
+	if c.StringArgs["chain"] != "" {
+		if err := handleChain(c, r); err != nil {
 			log.Errorln(err)
 		}
 
