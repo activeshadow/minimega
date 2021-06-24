@@ -1096,10 +1096,10 @@ func (r *Router) FirewallFlush() error {
 
 	i := len(r.FW.rules)
 	r.FW = &fw{
-			defaultAction: "accept",
-			rules:         make([][]*fwRule, i),
-			chains:        make(map[string]*fwChain),
-		},
+		defaultAction: "accept",
+		rules:         make([][]*fwRule, i),
+		chains:        make(map[string]*fwChain),
+	}
 
 	return nil
 }
