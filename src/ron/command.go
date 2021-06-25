@@ -37,6 +37,9 @@ type Command struct {
 	// Files to transfer back to the master
 	FilesRecv []string
 
+	// Endpoint service ("<IP:port>[|duration]") to try to connect to over TCP
+	TCPConnCheck string
+
 	// PID of the process to signal, -1 signals all processes
 	PID int
 
@@ -107,14 +110,15 @@ func (f *Filter) String() string {
 // Creates a copy of c.
 func (c *Command) Copy() *Command {
 	c2 := &Command{
-		ID:         c.ID,
-		Background: c.Background,
-		PID:        c.PID,
-		KillAll:    c.KillAll,
-		Prefix:     c.Prefix,
-		Stdin:      c.Stdin,
-		Stdout:     c.Stdout,
-		Stderr:     c.Stderr,
+		ID:           c.ID,
+		Background:   c.Background,
+		TCPConnCheck: c.TCPConnCheck,
+		PID:          c.PID,
+		KillAll:      c.KillAll,
+		Prefix:       c.Prefix,
+		Stdin:        c.Stdin,
+		Stdout:       c.Stdout,
+		Stderr:       c.Stderr,
 	}
 
 	// make deep copies

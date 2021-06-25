@@ -44,6 +44,10 @@ func processCommand(cmd *ron.Command) {
 		resp.Stdout, resp.Stderr = runCommand(cmd.Stdin, cmd.Stdout, cmd.Stderr, cmd.Command, cmd.Background)
 	}
 
+	if cmd.TCPConnCheck != "" {
+		resp.Stdout, resp.Stderr = tcpConnect(cmd.TCPConnCheck, cmd.Background)
+	}
+
 	if len(cmd.FilesRecv) != 0 {
 		sendFiles(cmd.ID, cmd.FilesRecv)
 	}
@@ -65,6 +69,12 @@ func lookPath(file string) (string, error) {
 
 	file = filepath.Join(*f_path, "files", file)
 	return exec.LookPath(file)
+}
+
+func tcpConnect(endpoint string, background bool) (string, string) {
+	log.Debug("tcpConnect called with %v, %v", endpoint, background)
+
+	return "STDOUT test", "STDERR test"
 }
 
 func runCommand(stdin, stdout, stderr string, command []string, background bool) (string, string) {

@@ -8,15 +8,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"minicli"
-	log "minilog"
 	"net"
 	"os"
-	"ron"
 	"sort"
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
+
+	"minicli"
+	log "minilog"
+	"ron"
 )
 
 type ccMount struct {
@@ -112,6 +114,9 @@ For more documentation, see the article "Command and Control API Tutorial".`,
 
 			"cc <delete,> <command,> <id or prefix or all>",
 			"cc <delete,> <response,> <id or prefix or all>",
+
+			"cc <tcp-conn,> <ip> <port> [timeout]",
+			"cc <tcp-conn,> <ip> <port> <wait,> <timeout>",
 		},
 		Call: wrapBroadcastCLI(cliCC),
 	},
@@ -169,6 +174,7 @@ var ccCliSubHandlers = map[string]wrappedCLIFunc{
 	"send":       cliCCFileSend,
 	"tunnel":     cliCCTunnel,
 	"listen":     cliCCListen,
+	"tcp-conn":   cliCCTCPConn,
 }
 
 func cliCC(ns *Namespace, c *minicli.Command, resp *minicli.Response) error {
@@ -568,7 +574,7 @@ func cliCCClients(ns *Namespace, c *minicli.Command, resp *minicli.Response) err
 func cliCCCommand(ns *Namespace, c *minicli.Command, resp *minicli.Response) error {
 	resp.Header = []string{
 		"id", "prefix", "command", "responses", "background",
-		"sent", "received", "level", "filter",
+		"sent", "received", "connectivity", "level", "filter",
 	}
 	resp.Tabular = [][]string{}
 
@@ -591,6 +597,12 @@ func cliCCCommand(ns *Namespace, c *minicli.Command, resp *minicli.Response) err
 			strconv.FormatBool(v.Background),
 			fmt.Sprintf("%v", v.FilesSend),
 			fmt.Sprintf("%v", v.FilesRecv),
+		}
+
+		if v.TCPConnCheck != "" {
+			row = append(row, "tcp("+v.TCPConnCheck+")")
+		} else {
+			row = append(row, "")
 		}
 
 		if v.Level != nil {
@@ -640,6 +652,26 @@ func cliCCListen(ns *Namespace, c *minicli.Command, resp *minicli.Response) erro
 	}
 
 	return ns.ccServer.Listen(port)
+}
+
+func cliCCTCPConn(ns *Namespace, c *minicli.Command, resp *minicli.Response) error {
+	endpoint := c.StringArgs["ip"] + ":" + c.StringArgs["port"]
+
+	if timeout := c.StringArgs["timeout"]; timeout != "" {
+		if _, err := time.ParseDuration(timeout); err != nil {
+			return fmt.Errorf("invalid timeout option %s: %v", timeout, err)
+		}
+
+		endpoint = endpoint + "|" + timeout
+	}
+
+	cmd := &ron.Command{
+		TCPConnCheck: endpoint,
+		Background:   !c.BoolArgs["wait"],
+	}
+
+	resp.Data = ns.NewCommand(cmd)
+	return nil
 }
 
 // cliCCMount needs to collect mounts from both the local ccMounts for the
