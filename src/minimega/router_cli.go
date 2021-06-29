@@ -64,7 +64,7 @@ router takes a number of subcommands:
   next-hop, and optionally a name for this router. For example to specify a
   static route(s):
 
-    router foo route static 0.0.0.0/0 10.0.0.1 default-route
+	router foo route static 0.0.0.0/0 10.0.0.1 default-route
 
   OSPF routes include an area and a network index corresponding to the
   interface described in 'vm config net'. You can also specify what networks
@@ -80,7 +80,7 @@ router takes a number of subcommands:
   For example, to advertise specific networks, advertise a static route or
   use a static route as a filter:
 
-    router foo route static 11.0.0.0/24 0 bar-route
+	router foo route static 11.0.0.0/24 0 bar-route
 	router foo route static 12.0.0.0/24 0 bar-route
 	router foo route ospf 0 export 10.0.0.0/24
 	router foo route ospf 0 export default-route
@@ -92,31 +92,31 @@ router takes a number of subcommands:
   For example, local router is in AS 100 with an ip 10.0.0.1 and bgp peer is in AS 200 with an ip of 20.0.0.1
   and you want to advterise network 10.0.0.0/24:
 
-    router foo route static 10.0.0.0/24 0 foo_out
-    router foo bgp bar local 10.0.0.1 100
+	router foo route static 10.0.0.0/24 0 foo_out
+	router foo bgp bar local 10.0.0.1 100
 	router foo bgp bar neighbor 20.0.0.1 200
 	router foo bgp bar export filter foo_out
 
   You can set up route reflection for BGP by ussing the rrclient command for that process.
   By using the command it indicates that the peer is a bgp client:
 
-    router foo bgp bar rrclient
+	router foo bgp bar rrclient
 
 - 'rid': Sets the 32 bit router ID for the router. Typically this ID is unqiue
   across the orginizations network and is used for various routing protocols ie OSPF
 
-    router foo rid 1.1.1.1
+	router foo rid 1.1.1.1
 
 - 'fw': specify flows to accept/drop/reject via iptables. For example, to accept
-	HTTP traffic from any IP address to host 192.168.0.5 on the interface at index 0
-	(which is on the 192.168.0.0/24 network):
+  HTTP traffic from any IP address to host 192.168.0.5 on the interface at index 0
+  (which is on the 192.168.0.0/24 network):
 
-		fw default drop
-	  fw accept out 0 192.168.0.5:80 tcp
+	fw default drop
+	fw accept out 0 192.168.0.5:80 tcp
 
-	Note that we use 'out' here since we're applying the rule to the interface
-	that's on the same network as the destination. The source and destination does
-	not have to include a port.
+  Note that we use 'out' here since we're applying the rule to the interface
+  that's on the same network as the destination. The source and destination does
+  not have to include a port.
 `,
 		Patterns: []string{
 			"router <vm>",
