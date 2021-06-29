@@ -7,11 +7,15 @@ package main
 import (
 	"bufio"
 	"bytes"
-	log "minilog"
+	"fmt"
+	"net"
 	"os/exec"
 	"path/filepath"
-	"ron"
 	"strings"
+	"time"
+
+	log "minilog"
+	"ron"
 )
 
 func processCommand(cmd *ron.Command) {
@@ -45,7 +49,7 @@ func processCommand(cmd *ron.Command) {
 	}
 
 	if cmd.TCPConnCheck != "" {
-		resp.Stdout, resp.Stderr = tcpConnect(cmd.TCPConnCheck, cmd.Background)
+		resp.Stdout, resp.Stderr = tcpConnect(cmd.TCPConnCheck)
 	}
 
 	if len(cmd.FilesRecv) != 0 {
@@ -69,12 +73,6 @@ func lookPath(file string) (string, error) {
 
 	file = filepath.Join(*f_path, "files", file)
 	return exec.LookPath(file)
-}
-
-func tcpConnect(endpoint string, background bool) (string, string) {
-	log.Debug("tcpConnect called with %v, %v", endpoint, background)
-
-	return "STDOUT test", "STDERR test"
 }
 
 func runCommand(stdin, stdout, stderr string, command []string, background bool) (string, string) {
@@ -276,4 +274,37 @@ func killAll(needle string) {
 			}
 		}
 	}
+}
+
+// `test` argument will look something like "1.2.3.4:80|10s"
+func tcpConnect(test string) (string, string) {
+	log.Debug("tcpConnect called with %s", test)
+
+	fields := strings.Split(test, "|")
+
+	if len(fields) != 2 {
+		return "", fmt.Sprintf("malformed TCP connectivity check: %s", test)
+	}
+
+	endpoint := fields[0]
+
+	wait, err := time.ParseDuration(fields[1])
+	if err != nil {
+		return "", fmt.Sprintf("invalid wait duration %s: %v", fields[1], err)
+	}
+
+	timeout := time.After(wait)
+
+	for {
+		select {
+		case <-timeout:
+			return fmt.Sprintf("%s | fail", endpoint), ""
+		default:
+			if conn, err := net.Dial("tcp", endpoint); err == nil {
+				conn.Close()
+				return fmt.Sprintf("%s | pass", endpoint), ""
+			}
+		}
+	}
+
 }

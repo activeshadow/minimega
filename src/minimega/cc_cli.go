@@ -115,8 +115,7 @@ For more documentation, see the article "Command and Control API Tutorial".`,
 			"cc <delete,> <command,> <id or prefix or all>",
 			"cc <delete,> <response,> <id or prefix or all>",
 
-			"cc <tcp-conn,> <ip> <port> [timeout]",
-			"cc <tcp-conn,> <ip> <port> <wait,> <timeout>",
+			"cc <tcp-conn,> <ip or fqdn> <port> wait <timeout>",
 		},
 		Call: wrapBroadcastCLI(cliCC),
 	},
@@ -600,7 +599,8 @@ func cliCCCommand(ns *Namespace, c *minicli.Command, resp *minicli.Response) err
 		}
 
 		if v.TCPConnCheck != "" {
-			row = append(row, "tcp("+v.TCPConnCheck+")")
+			fields := strings.Split(v.TCPConnCheck, "|")
+			row = append(row, fmt.Sprintf("tcp://%s (%s wait)", fields[0], fields[1]))
 		} else {
 			row = append(row, "")
 		}
@@ -655,20 +655,17 @@ func cliCCListen(ns *Namespace, c *minicli.Command, resp *minicli.Response) erro
 }
 
 func cliCCTCPConn(ns *Namespace, c *minicli.Command, resp *minicli.Response) error {
-	endpoint := c.StringArgs["ip"] + ":" + c.StringArgs["port"]
-
-	if timeout := c.StringArgs["timeout"]; timeout != "" {
-		if _, err := time.ParseDuration(timeout); err != nil {
-			return fmt.Errorf("invalid timeout option %s: %v", timeout, err)
-		}
-
-		endpoint = endpoint + "|" + timeout
+	if _, err := strconv.Atoi(c.StringArgs["port"]); err != nil {
+		return fmt.Errorf("invalid port %s: %v", c.StringArgs["port"], err)
 	}
 
-	cmd := &ron.Command{
-		TCPConnCheck: endpoint,
-		Background:   !c.BoolArgs["wait"],
+	if _, err := time.ParseDuration(c.StringArgs["timeout"]); err != nil {
+		return fmt.Errorf("invalid wait duration %s: %v", c.StringArgs["timeout"], err)
 	}
+
+	endpoint := c.StringArgs["ip"] + ":" + c.StringArgs["port"] + "|" + c.StringArgs["timeout"]
+
+	cmd := &ron.Command{TCPConnCheck: endpoint}
 
 	resp.Data = ns.NewCommand(cmd)
 	return nil
