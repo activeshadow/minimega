@@ -5,6 +5,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -115,7 +116,7 @@ For more documentation, see the article "Command and Control API Tutorial".`,
 			"cc <delete,> <command,> <id or prefix or all>",
 			"cc <delete,> <response,> <id or prefix or all>",
 
-			"cc <tcp-conn,> <ip or fqdn> <port> wait <timeout>",
+			"cc <test-conn,> <tcp,udp> <ip or fqdn> <port> wait <timeout> [base64 udp packet]",
 		},
 		Call: wrapBroadcastCLI(cliCC),
 	},
@@ -173,7 +174,7 @@ var ccCliSubHandlers = map[string]wrappedCLIFunc{
 	"send":       cliCCFileSend,
 	"tunnel":     cliCCTunnel,
 	"listen":     cliCCListen,
-	"tcp-conn":   cliCCTCPConn,
+	"test-conn":  cliCCTestConn,
 }
 
 func cliCC(ns *Namespace, c *minicli.Command, resp *minicli.Response) error {
@@ -598,9 +599,8 @@ func cliCCCommand(ns *Namespace, c *minicli.Command, resp *minicli.Response) err
 			fmt.Sprintf("%v", v.FilesRecv),
 		}
 
-		if v.TCPConnCheck != "" {
-			fields := strings.Split(v.TCPConnCheck, "|")
-			row = append(row, fmt.Sprintf("tcp://%s (%s wait)", fields[0], fields[1]))
+		if v.ConnTest != nil {
+			row = append(row, fmt.Sprintf("%s (%v wait)", v.ConnTest.Endpoint, v.ConnTest.Wait))
 		} else {
 			row = append(row, "")
 		}
@@ -654,18 +654,36 @@ func cliCCListen(ns *Namespace, c *minicli.Command, resp *minicli.Response) erro
 	return ns.ccServer.Listen(port)
 }
 
-func cliCCTCPConn(ns *Namespace, c *minicli.Command, resp *minicli.Response) error {
+func cliCCTestConn(ns *Namespace, c *minicli.Command, resp *minicli.Response) error {
 	if _, err := strconv.Atoi(c.StringArgs["port"]); err != nil {
 		return fmt.Errorf("invalid port %s: %v", c.StringArgs["port"], err)
 	}
 
-	if _, err := time.ParseDuration(c.StringArgs["timeout"]); err != nil {
+	wait, err := time.ParseDuration(c.StringArgs["timeout"])
+	if err != nil {
 		return fmt.Errorf("invalid wait duration %s: %v", c.StringArgs["timeout"], err)
 	}
 
-	endpoint := c.StringArgs["ip"] + ":" + c.StringArgs["port"] + "|" + c.StringArgs["timeout"]
+	scheme := "tcp"
+	if c.BoolArgs["udp"] {
+		scheme = "udp"
+	}
 
-	cmd := &ron.Command{TCPConnCheck: endpoint}
+	test := ron.ConnTest{
+		Endpoint: fmt.Sprintf("%s://%s:%s", scheme, c.StringArgs["ip"], c.StringArgs["port"]),
+		Wait:     wait,
+	}
+
+	if packet := c.StringArgs["base64"]; len(packet) > 0 {
+		var err error
+
+		test.Packet, err = base64.StdEncoding.DecodeString(packet)
+		if err != nil {
+			return fmt.Errorf("unable to decode base64 packet string: %v", err)
+		}
+	}
+
+	cmd := &ron.Command{ConnTest: &test}
 
 	resp.Data = ns.NewCommand(cmd)
 	return nil

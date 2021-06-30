@@ -8,6 +8,7 @@ import (
 	"fmt"
 	log "minilog"
 	"strings"
+	"time"
 )
 
 type Filter struct {
@@ -37,8 +38,8 @@ type Command struct {
 	// Files to transfer back to the master
 	FilesRecv []string
 
-	// Endpoint service ("<IP:port>[|duration]") to try to connect to over TCP
-	TCPConnCheck string
+	// Connectivity test to execute
+	ConnTest *ConnTest
 
 	// PID of the process to signal, -1 signals all processes
 	PID int
@@ -76,6 +77,12 @@ type Response struct {
 	Stderr string
 }
 
+type ConnTest struct {
+	Endpoint string
+	Wait     time.Duration
+	Packet   []byte
+}
+
 func (f *Filter) String() string {
 	if f == nil {
 		return ""
@@ -110,15 +117,14 @@ func (f *Filter) String() string {
 // Creates a copy of c.
 func (c *Command) Copy() *Command {
 	c2 := &Command{
-		ID:           c.ID,
-		Background:   c.Background,
-		TCPConnCheck: c.TCPConnCheck,
-		PID:          c.PID,
-		KillAll:      c.KillAll,
-		Prefix:       c.Prefix,
-		Stdin:        c.Stdin,
-		Stdout:       c.Stdout,
-		Stderr:       c.Stderr,
+		ID:         c.ID,
+		Background: c.Background,
+		PID:        c.PID,
+		KillAll:    c.KillAll,
+		Prefix:     c.Prefix,
+		Stdin:      c.Stdin,
+		Stdout:     c.Stdout,
+		Stderr:     c.Stderr,
 	}
 
 	// make deep copies
@@ -132,9 +138,15 @@ func (c *Command) Copy() *Command {
 		c2.Filter = new(Filter)
 		*c2.Filter = *c.Filter
 	}
+
 	if c.Level != nil {
 		c2.Level = new(log.Level)
 		*c2.Level = *c.Level
+	}
+
+	if c.ConnTest != nil {
+		c2.ConnTest = new(ConnTest)
+		*c2.ConnTest = *c.ConnTest
 	}
 
 	return c2

@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"fmt"
 	"net"
+	"net/url"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -48,8 +49,8 @@ func processCommand(cmd *ron.Command) {
 		resp.Stdout, resp.Stderr = runCommand(cmd.Stdin, cmd.Stdout, cmd.Stderr, cmd.Command, cmd.Background)
 	}
 
-	if cmd.TCPConnCheck != "" {
-		resp.Stdout, resp.Stderr = tcpConnect(cmd.TCPConnCheck)
+	if cmd.ConnTest != nil {
+		resp.Stdout, resp.Stderr = testConnect(cmd.ConnTest)
 	}
 
 	if len(cmd.FilesRecv) != 0 {
@@ -276,35 +277,44 @@ func killAll(needle string) {
 	}
 }
 
-// `test` argument will look something like "1.2.3.4:80|10s"
-func tcpConnect(test string) (string, string) {
-	log.Debug("tcpConnect called with %s", test)
+func testConnect(test *ron.ConnTest) (string, string) {
+	log.Debug("testConnect called with %v", *test)
 
-	fields := strings.Split(test, "|")
-
-	if len(fields) != 2 {
-		return "", fmt.Sprintf("malformed TCP connectivity check: %s", test)
-	}
-
-	endpoint := fields[0]
-
-	wait, err := time.ParseDuration(fields[1])
+	uri, err := url.Parse(test.Endpoint)
 	if err != nil {
-		return "", fmt.Sprintf("invalid wait duration %s: %v", fields[1], err)
+		return "", fmt.Sprintf("unable to parse test URI %s: %v", test.Endpoint, err)
 	}
 
-	timeout := time.After(wait)
+	timeout := time.After(test.Wait)
 
 	for {
 		select {
 		case <-timeout:
-			return fmt.Sprintf("%s | fail", endpoint), ""
+			return fmt.Sprintf("%s | fail", uri.Host), ""
 		default:
-			if conn, err := net.Dial("tcp", endpoint); err == nil {
-				conn.Close()
-				return fmt.Sprintf("%s | pass", endpoint), ""
+			if conn, err := net.DialTimeout(uri.Scheme, uri.Host, 500*time.Millisecond); err == nil {
+				defer conn.Close()
+
+				if uri.Scheme == "udp" {
+					if err := conn.SetDeadline(time.Now().Add(500 * time.Millisecond)); err != nil {
+						return fmt.Sprintf("%s | fail", uri.Host), ""
+					}
+
+					if len(test.Packet) > 0 {
+						if _, err := conn.Write(test.Packet); err != nil {
+							return fmt.Sprintf("%s | fail", uri.Host), ""
+						}
+					}
+
+					buf := make([]byte, 1)
+
+					if _, err := conn.Read(buf); err != nil {
+						return fmt.Sprintf("%s | fail", uri.Host), ""
+					}
+				}
+
+				return fmt.Sprintf("%s | pass", uri.Host), ""
 			}
 		}
 	}
-
 }
