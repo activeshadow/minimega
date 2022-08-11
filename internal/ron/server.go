@@ -1128,6 +1128,15 @@ func (s *Server) responseHandler() {
 	for cin := range s.responses {
 		log.Debug("responseHandler: %v", cin.UUID)
 
+		s.clientLock.Lock()
+		_, ok := s.vms[cin.UUID]
+		s.clientLock.Unlock()
+
+		if !ok {
+			s.removeClient(cin.UUID)
+			continue
+		}
+
 		// update all the client fields
 		s.updateClient(cin)
 

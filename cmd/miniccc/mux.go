@@ -57,6 +57,7 @@ func mux(done chan struct{}) {
 			log.Warn("server connection lost: resetting client")
 
 			// server connection lost, so reset client
+			time.Sleep(5 * time.Second)
 			resetClient()
 			return
 		}
