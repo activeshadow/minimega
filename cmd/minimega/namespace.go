@@ -525,6 +525,11 @@ func (n *Namespace) Launch(requestor string, q *QueuedVMs) []error {
 		errs = append(errs, err)
 	}
 
+	// Register VM with cc server so it's also available for TCP-based channel.
+	for _, vm := range n.VMs.m {
+		n.ccServer.RegisterVM(vm)
+	}
+
 	return errs
 }
 

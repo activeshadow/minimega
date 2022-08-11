@@ -1031,17 +1031,11 @@ func (vm *KvmVM) waitToKill(p *os.Process, wait chan bool) {
 }
 
 func (vm *KvmVM) Connect(cc *ron.Server, reconnect bool) error {
-	if !vm.Backchannel {
+	if !vm.Backchannel || reconnect {
 		return nil
 	}
 
-	if !reconnect {
-		cc.RegisterVM(vm)
-
-		return cc.DialSerial(vm.path("cc"), vm.GetUUID())
-	}
-
-	return nil
+	return cc.DialSerial(vm.path("cc"), vm.GetUUID())
 }
 
 func (vm *KvmVM) Disconnect(cc *ron.Server) error {

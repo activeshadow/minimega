@@ -1105,8 +1105,6 @@ func (vm *ContainerVM) Connect(cc *ron.Server, reconnect bool) error {
 		return nil
 	}
 
-	cc.RegisterVM(vm)
-
 	ccPath := filepath.Join(vm.effectivePath, "cc")
 
 	return cc.ListenUnix(ccPath)
