@@ -85,6 +85,7 @@ func (b Bridges) newBridge(name string) error {
 		trunks:   make(map[string]bool),
 		tunnels:  make(map[string]bool),
 		mirrors:  make(map[string]bool),
+		bonds:    make(map[string][]string),
 		captures: make(map[int]capture),
 		nameChan: b.nameChan,
 		config:   make(map[string]string),

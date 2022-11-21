@@ -29,6 +29,9 @@ type Bridge struct {
 	// mirrors records the mirror tap names used by captures
 	mirrors map[string]bool
 
+	// bonds tracks bonded interfaces added to the bridge
+	bonds map[string][]string
+
 	// captures records the "stop" flags that are set to non-zero values when
 	// we want to stop a capture.
 	captures map[int]capture

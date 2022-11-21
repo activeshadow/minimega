@@ -136,6 +136,16 @@ Only affects taps on the local node.`,
 		HelpLong: `
 When called with no arguments, display information about all managed bridges.
 
+To create a bond on a bridge containing multiple interfaces for a VM, use
+'bridge bond'. For example, to create an 'active-backup' bond named 'foo-bond'
+on bridge 'mega_bridge' with interfaces 1 and 2 on VM foo:
+
+	bridge bond mega_bridge foo-bond foo 1,2 active-backup
+
+There are three types of bonds supported: active-backup, balance-slb, and
+balance-tcp. When 'balance-tcp' is used, LACP is first set to 'active' for the
+bond and 'lacp-fallback-ab' is enabled.
+
 To add a trunk interface to a specific bridge, use 'bridge trunk'. For example,
 to add interface bar to bridge foo:
 
@@ -149,6 +159,7 @@ example, to create a vxlan tunnel to another bridge with IP 10.0.0.1:
 Note: bridge is not a namespace-aware command.`,
 		Patterns: []string{
 			"bridge",
+			"bridge <bond,> <bridge> <name> <vm name> <interface indexes> <mode>",
 			"bridge <config,> <bridge> <config>",
 			"bridge <trunk,> <bridge> <interface>",
 			"bridge <notrunk,> <bridge> <interface>",
@@ -368,6 +379,43 @@ func cliBridge(ns *Namespace, c *minicli.Command, resp *minicli.Response) error 
 		return br.Config(c.StringArgs["config"])
 	} else if c.BoolArgs["destroy"] {
 		return bridges.DestroyBridge(c.StringArgs["bridge"])
+	} else if c.BoolArgs["bond"] {
+		var (
+			bondName = c.StringArgs["name"]
+			bondMode = c.StringArgs["mode"]
+			vmName   = c.StringArgs["vm"]
+			ifaces   = strings.Split(iface, ",")
+		)
+
+		vm := ns.FindVM(vmName)
+		if vm == nil {
+			return vmNotFound(vmName)
+		}
+
+		ifaceNames := make([]string, len(ifaces))
+		vlan := -1
+
+		for i, j := range ifaces {
+			idx, err := strconv.Atoi(j)
+			if err != nil {
+				return fmt.Errorf("invalid interface number: %s", j)
+			}
+
+			cfg, err := vm.GetNetwork(idx)
+			if err != nil {
+				return fmt.Errorf("interface %d not found for vm %s", idx, vmName)
+			}
+
+			if vlan < 0 {
+				vlan = cfg.VLAN
+			} else if cfg.VLAN != vlan {
+				log.Warn("interface %d on vm %s is not on VLAN %d -- still defaulting to %d for bond", idx, vmName, vlan, vlan)
+			}
+
+			ifaceNames[i] = cfg.Tap
+		}
+
+		return br.AddBond(bondName, bondMode, ifaceNames, vlan)
 	}
 
 	// Must want to list bridges
